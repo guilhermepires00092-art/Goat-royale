@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Termo Royale</title>
+    <style>
+        /* CSS EMBUTIDO PARA GARANTIR CARREGAMENTO */
+        :root { --bg: #121213; --surface: #2c2c2e; --green: #538d4e; --yellow: #b59f3b; --text: #fff; }
+        * { box-sizing: border-box; }
+        body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        .screen { display: none; width: 100%; height: 100%; flex-direction: column; align-items: center; }
+        .screen.active { display: flex; }
+        .center-content { justify-content: center; }
+        .hidden { display: none !important; }
+
+        /* Login */
+        .card { background: var(--surface); padding: 20px; border-radius: 10px; width: 90%; max-width: 400px; text-align: center; }
+        input { width: 100%; padding: 15px; font-size: 1.2rem; margin-bottom: 10px; text-transform: uppercase; text-align: center; }
+        button { width: 100%; padding: 15px; font-weight: bold; cursor: pointer; border: none; border-radius: 5px; margin-top: 5px; font-size: 1rem; }
+        .btn-primary { background: var(--green); color: white; }
+        .btn-secondary { background: #4da6ff; color: white; }
+
+        /* Game Grid */
+        .game-layout { justify-content: space-between; }
+        .board-container { flex-grow: 1; display: flex; justify-content: center; align-items: center; width: 100%; position: relative; }
+        #grid-container { display: grid; grid-template-rows: repeat(6, 1fr); gap: 5px; width: 100%; max-width: 350px; aspect-ratio: 5/6; max-height: 50vh; }
+        .row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
+        .tile { border: 2px solid #565758; display: flex; justify-content: center; align-items: center; font-size: 1.5rem; font-weight: bold; }
+        .tile.correct { background: var(--green); border-color: var(--green); }
+        .tile.present { background: var(--yellow); border-color: var(--yellow); }
+        .tile.absent { background: #3a3a3c; border-color: #3a3a3c; }
+
+        /* Keyboard */
+        .keyboard { width: 100%; max-width: 500px; padding: 5px; background: var(--bg); }
+        .kb-row { display: flex; width: 100%; margin-bottom: 5px; justify-content: center; }
+        .key { flex: 1; height: 45px; margin: 0 2px; background: #818384; display: flex; justify-content: center; align-items: center; border-radius: 4px; font-weight: bold; user-select: none; }
+        .key-wide { flex: 1.5; font-size: 0.8rem; }
+        .key.correct { background: var(--green); } .key.present { background: var(--yellow); } .key.absent { opacity: 0.5; }
+
+        /* Overlay & Info */
+        #message-area { position: absolute; top: 10%; background: #fff; color: #000; padding: 10px; border-radius: 5px; font-weight: bold; display: none; }
+        #overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; z-index: 100; }
+        .game-header { display: flex; justify-content: space-between; width: 100%; padding: 10px; background: var(--surface); }
+    </style>
+</head>
+<body>
+
+    <!-- 1. TELA DE LOGIN -->
+    <div id="login-screen" class="screen active center-content">
+        <h1>TERMO ROYALE</h1>
+        <div class="card">
+            <input type="text" id="player-name" placeholder="SEU NOME" maxlength="10">
+            <!-- USO DO ONCLICK DIRETO: MÁXIMA COMPATIBILIDADE -->
+            <button class="btn-primary" onclick="clickCreate()">CRIAR SALA</button>
+            <br><br>
+            <input type="text" id="room-code-input" placeholder="CÓDIGO DA SALA" maxlength="6" inputmode="numeric">
+            <button class="btn-secondary" onclick="clickJoin()">ENTRAR</button>
+        </div>
+        <p id="status-connection" style="font-size: 12px; color: yellow; margin-top: 20px;">Conectando...</p>
+    </div>
+
+    <!-- 2. LOBBY -->
+    <div id="lobby-screen" class="screen">
+        <h2 style="margin: 10px;">SALA: <span id="lobby-code">---</span></h2>
+        <div id="player-list" style="width: 90%; text-align: left;"></div>
+        <p id="waiting-msg">Aguardando...</p>
+        <button id="btn-start" class="hidden btn-primary" style="width: 90%;" onclick="clickStart()">INICIAR JOGO</button>
+    </div>
+
+    <!-- 3. JOGO -->
+    <div id="game-screen" class="screen game-layout">
+        <div class="game-header">
+            <span>Rodada <span id="current-round">1</span>/10</span>
+            <span id="timer" style="color: red; font-weight: bold;">45</span>
+        </div>
+        <div class="board-container">
+            <div id="grid-container"></div>
+            <div id="message-area"></div>
+        </div>
+        <div class="keyboard" id="keyboard"></div>
+    </div>
+
+    <!-- OVERLAY -->
+    <div id="overlay" class="hidden">
+        <div style="background: #2c2c2e; padding: 30px; text-align: center; border-radius: 10px;">
+            <h2 id="overlay-title"></h2>
+            <p id="overlay-msg"></p>
+            <button onclick="location.reload()" class="btn-primary">SAIR</button>
+        </div>
+    </div>
+
+    <!-- CARREGA O SOCKET IO -->
+    <script src="/socket.io/socket.io.js"></script>
+
+    <!-- LOGICA DO JOGO -->
+    <script>
+        const CLIENT_WORDS = ["TERMO", "JOGAR", "LIVRO", "NOITE", "MUNDO", "LETRA", "AGORA", "CORPO", "FESTA", "GRADE", "TEXTO", "IDEIA", "PODER", "SALAS", "TEMPO", "CHUVA", "VENTO", "CARRO", "NAVIO", "PEIXE", "NUVEM", "BARCO", "FLORA", "SERIA", "MUITO", "VOCAL", "PLANO", "RISCO", "POETA", "CAIXA", "AMIGO", "COISA", "FORMA", "MINHA", "NOSSA", "AREIA", "BANHO", "CINCO", "DENTE", "ENVIO"];
+
+        // Conecta ao socket
+        const socket = io();
+        
+        // Variaveis
+        let currentRow = 0, currentTile = 0, currentGuess = '', canType = false;
+
+        // Feedback de Conexão na Tela
+        socket.on('connect', () => {
+            document.getElementById('status-connection').innerText = "🟢 CONECTADO AO SERVIDOR";
+            document.getElementById('status-connection').style.color = "#0f0";
+        });
+        
+        socket.on('disconnect', () => {
+            document.getElementById('status-connection').innerText = "🔴 DESCONECTADO";
+            document.getElementById('status-connection').style.color = "red";
+        });
+
+        // --- FUNÇÕES DE CLICK (DIRETAS) ---
+        function clickCreate() {
+            const name = document.getElementById('player-name').value.toUpperCase().trim();
+            if (!name) return alert("Digite um nome!");
+            
+            if (!socket.connected) return alert("Erro: Sem conexão com o servidor.");
+
+            socket.emit('createRoom', name);
+        }
+
+        function clickJoin() {
+            const name = document.getElementById('player-name').value.toUpperCase().trim();
+            const code = document.getElementById('room-code-input').value.trim();
+            if (!name || !code) return alert("Preencha Nome e Código");
+            
+            socket.emit('joinRoom', { code, name });
+        }
+
+        function clickStart() {
+            socket.emit('startGame');
+        }
+
+        // --- EVENTOS DO SOCKET ---
+        socket.on('roomJoined', (data) => {
+            changeScreen('lobby-screen');
+            document.getElementById('lobby-code').innerText = data.code;
+            if(data.isCreator) {
+                document.getElementById('btn-start').classList.remove('hidden');
+                document.getElementById('waiting-msg').classList.add('hidden');
+            }
+        });
+
+        socket.on('updatePlayers', (players) => {
+            const list = document.getElementById('player-list');
+            list.innerHTML = players.map(p => 
+                `<div style="padding:10px; border-bottom:1px solid #444; display:flex; justify-content:space-between;">
+                    <span>${p.name}</span><span>V: ${p.wins} | ${p.score}pts</span>
+                </div>`
+            ).join('');
+        });
+
+        socket.on('matchStarted', () => {
+            changeScreen('game-screen');
+            initKeyboard();
+        });
+
+        socket.on('newRound', ({round}) => {
+            document.getElementById('current-round').innerText = round;
+            resetGrid();
+            canType = true;
+            document.getElementById('overlay').classList.add('hidden');
+        });
+
+        socket.on('timerUpdate', (t) => document.getElementById('timer').innerText = t);
+
+        socket.on('guessResult', ({result, isCorrect}) => {
+            paintRow(currentRow, result);
+            updateKeyboard(currentGuess, result);
+            if(isCorrect) {
+                showMessage("ACERTOU!");
+                canType = false;
+            } else {
+                currentRow++; currentTile = 0; currentGuess = '';
+                if(currentRow >= 6) { showMessage("FIM TENTATIVAS"); canType = false; }
+            }
+        });
+
+        socket.on('roundEnded', ({word}) => showOverlay("Fim da Rodada", "Palavra: " + word));
+        socket.on('matchEnded', ({winnerName}) => showOverlay("Fim de Jogo", "Vencedor: " + winnerName));
+        socket.on('error', (msg) => alert(msg));
+        socket.on('returnToLobby', () => changeScreen('lobby-screen'));
+
+        // --- AUXILIARES ---
+        function changeScreen(id) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            document.getElementById(id).classList.add('active');
+        }
+
+        function showMessage(msg) {
+            const el = document.getElementById('message-area');
+            el.innerText = msg; el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 2000);
+        }
+
+        function showOverlay(title, msg) {
+            document.getElementById('overlay').classList.remove('hidden');
+            document.getElementById('overlay-title').innerText = title;
+            document.getElementById('overlay-msg').innerText = msg;
+        }
+
+        // --- GAME LOGIC ---
+        function resetGrid() {
+            currentRow = 0; currentTile = 0; currentGuess = '';
+            const container = document.getElementById('grid-container');
+            container.innerHTML = '';
+            for(let i=0; i<6; i++) {
+                const row = document.createElement('div'); row.className = 'row';
+                for(let j=0; j<5; j++) {
+                    const tile = document.createElement('div'); tile.className = 'tile';
+                    tile.id = `tile-${i}-${j}`;
+                    row.appendChild(tile);
+                }
+                container.appendChild(row);
+            }
+            document.querySelectorAll('.key').forEach(k => k.className = k.className.replace(/correct|present|absent/g, ''));
+        }
+
+        function handleInput(key) {
+            if(!canType) return;
+            if(key === 'BACKSPACE') {
+                if(currentTile > 0) {
+                    currentTile--; currentGuess = currentGuess.slice(0, -1);
+                    document.getElementById(`tile-${currentRow}-${currentTile}`).innerText = '';
+                }
+                return;
+            }
+            if(key === 'ENTER') {
+                if(currentGuess.length < 5) return showMessage("Muito Curto");
+                if(!CLIENT_WORDS.includes(currentGuess)) return showMessage("Não existe");
+                socket.emit('submitGuess', currentGuess);
+                return;
+            }
+            if(currentGuess.length < 5 && /^[A-Z]$/.test(key)) {
+                document.getElementById(`tile-${currentRow}-${currentTile}`).innerText = key;
+                currentGuess += key; currentTile++;
+            }
+        }
+
+        function paintRow(r, res) {
+            for(let i=0; i<5; i++) {
+                const t = document.getElementById(`tile-${r}-${i}`);
+                t.classList.add(res[i]);
+            }
+        }
+
+        function updateKeyboard(guess, res) {
+             guess.split('').forEach((l, i) => {
+                 const k = document.getElementById('key-'+l);
+                 if(k) {
+                     if(res[i] === 'correct') k.className = 'key correct';
+                     else if(res[i] === 'present' && !k.classList.contains('correct')) k.className = 'key present';
+                     else if(res[i] === 'absent' && !k.classList.contains('correct') && !k.classList.contains('present')) k.className = 'key absent';
+                 }
+             });
+        }
+
+        function initKeyboard() {
+            const kb = document.getElementById('keyboard'); kb.innerHTML = '';
+            const rows = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'];
+            rows.forEach((r, idx) => {
+                const div = document.createElement('div'); div.className = 'kb-row';
+                if(idx===2) {
+                    const back = document.createElement('div'); back.className = 'key key-wide'; back.innerText = '⌫';
+                    back.onclick = (e) => { e.preventDefault(); handleInput('BACKSPACE'); };
+                    div.appendChild(back);
+                }
+                r.split('').forEach(char => {
+                    const key = document.createElement('div'); key.className = 'key'; key.innerText = char; key.id = 'key-'+char;
+                    key.onclick = (e) => { e.preventDefault(); handleInput(char); };
+                    div.appendChild(key);
+                });
+                if(idx===2) {
+                    const ent = document.createElement('div'); ent.className = 'key key-wide'; ent.innerText = 'ENTER';
+                    ent.onclick = (e) => { e.preventDefault(); handleInput('ENTER'); };
+                    div.appendChild(ent);
+                }
+                kb.appendChild(div);
+            });
+        }
+    </script>
+</body>
+</html>

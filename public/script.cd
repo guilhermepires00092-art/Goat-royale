@@ -1,0 +1,456 @@
+const socket = io();
+
+// LISTA RIGOROSAMENTE FILTRADA (5 Letras)
+const CLIENT_WORDS = [
+    "ABATA", "ABOCA", "ABRIR", "ACASO", "ACATA", "ACENA", "ACESO", "ACIMA", "ACIDO", "ACOAR",
+    "ACULA", "ACURA", "ADEUS", "ADIRA", "ADORA", "AEDOS", "AEREO", "AFETO", "AFLAR", "AGIDA",
+    "AGITO", "AGNUS", "AGORA", "AGORO", "AGUDA", "AGUDO", "AGUIA", "AINDA", "AJEJO", "AJUDA",
+    "ALBUM", "ALCAS", "ALGAS", "ALGOZ", "ALGUM", "ALHOS", "ALOES", "ALOJA", "ALPES", "ALTAR",
+    "ALUNA", "ALUNO", "AMADA", "AMADO", "AMAGO", "AMANA", "AMIGA", "AMIGO", "AMORA", "AMPLO",
+    "ANCIA", "ANDAR", "ANEIS", "ANEXO", "ANIMA", "ANIMO", "ANJOS", "ANSIA", "ANTES", "ANUAL",
+    "ANUIR", "ANULA", "APEEI", "APELO", "APICE", "APITO", "APOIA", "APOIO", "APONA", "APTOS",
+    "AQUEM", "AQUEU", "ARACA", "ARAME", "ARARA", "ARCAR", "ARCOS", "ARDEA", "AREIA", "ARENA",
+    "ARIDO", "AROMA", "ARRAS", "ARROZ", "ARTES", "ASILO", "ASSAZ", "ASSIM", "ASTIL", "ASTRO",
+    "ATEIA", "ATEUS", "ATLAS", "ATIVE", "ATRAS", "ATRIO", "ATROZ", "ATUAL", "ATURO", "AUDAZ",
+    "AUDIO", "AURAS", "AUREA", "AUREO", "AUTOR", "AVARO", "AVAIA", "AVEIA", "AVELA", "AVEXA",
+    "AVIAO", "AVIDE", "AVIDO", "AVINA", "AVISO", "AXIAL", "AZEDO", "AZUIS", "BABAR", "BACIA",
+    "BACON", "BAFOS", "BAILE", "BAIAO", "BAIXO", "BAJUS", "BALAS", "BALAO", "BALDA", "BALDE",
+    "BALIR", "BALSA", "BAMBU", "BANAL", "BANCA", "BANCO", "BANDA", "BANDO", "BANHO", "BANIR",
+    "BARAU", "BARBA", "BARCO", "BARRA", "BARRO", "BASES", "BASTA", "BATER", "BATOM", "BAURU",
+    "BAZAR", "BEATA", "BEATO", "BEBER", "BECOS", "BEIJA", "BEIJO", "BEIRA", "BELAS", "BELOS",
+    "BENTO", "BERCO", "BERRO", "BESTA", "BICOS", "BINGO", "BIOMA", "BIQUE", "BISPO", "BLASF",
+    "BLEFE", "BLOCO", "BLUSA", "BOATE", "BOCAL", "BODES", "BOFES", "BOIAS", "BOINA", "BOLAS",
+    "BOLDO", "BOLHA", "BOLOS", "BOLSA", "BOMBA", "BONDE", "BONES", "BONUS", "BORDA", "BORDO",
+    "BORRA", "BOSSA", "BOTAO", "BOTAR", "BRACO", "BRASA", "BRAVO", "BREJO", "BREVE", "BRIGA",
+    "BRIOS", "BRISA", "BROCA", "BROTO", "BRUMA", "BRUTO", "BRUXA", "BUCAL", "BUCHA", "BUCHO",
+    "BULAM", "BULIR", "BUQUE", "BURIL", "BURLA", "BURRO", "BUSCA", "BUSTO", "BUUNO", "CABAL",
+    "CABER", "CABOS", "CABRA", "CACAU", "CACHO", "CACOA", "CAIXA", "CALCA", "CALCO", "CALDO",
+    "CALHA", "CALMA", "CALMO", "CALOR", "CAMPO", "CANAL", "CANCE", "CANJA", "CANOA", "CANTE",
+    "CANTO", "CANZO", "CAPAZ", "CAPUZ", "CARDA", "CARGA", "CARNE", "CARRO", "CARTA", "CASAL",
+    "CASCA", "CASCO", "CASTA", "CAUDA", "CAULE", "CAUSA", "CAUSO", "CAVOS", "CEDER", "CEGAS",
+    "CEIAS", "CEIFO", "CENAS", "CENSO", "CENTO", "CERCA", "CERCO", "CERNE", "CERNI", "CERTO",
+    "CESTA", "CETIM", "CHAGA", "CHALE", "CHAMA", "CHAPA", "CHATA", "CHATO", "CHAVE", "CHEFE",
+    "CHEIO", "CHEIRO", "CHIAS", "CHINA", "CHORO", "CHUMBO", "CHUTE", "CHUVA", "CICLO", "CIDRA",
+    "CIFRA", "CINDA", "CINTO", "CINZA", "CIRCO", "CISMA", "CITAR", "CIVEL", "CIVIL", "CIUME",
+    "CLAME", "CLARA", "CLARO", "CLASSE", "CLAVA", "CLIMA", "CLINA", "CLUBE", "COAVA", "COBRA",
+    "COBRE", "COELHO", "COESO", "COEVA", "COFRE", "COIBA", "COIFA", "COISA", "COITE", "COLAR",
+    "COMER", "COMIA", "COMUM", "CONDE", "CONTE", "CONTO", "COPAS", "COPOS", "CORAG", "CORAL",
+    "CORAR", "CORDA", "COROA", "CORPO", "CORTE", "CORVO", "COSER", "COSTA", "COURO", "COVEM",
+    "COXA", "COZER", "CRASE", "CRAVO", "CREEM", "CREME", "CRIAR", "CRISE", "CRIVO", "CRIME",
+    "CRUEL", "CRUZ", "CUBO", "CUIA", "CUIDAR", "CULPA", "CULTO", "CUNHA", "CUNHO", "CUPOM",
+    "CURTA", "CURTO", "CURVA", "CUSPO", "CUSTO", "DADOS", "DAMAS", "DANCA", "DARDO", "DATAS",
+    "DECAI", "DECOA", "DEDOS", "DEGAS", "DENSO", "DENTE", "DESDE", "DESTA", "DETER", "DEVER",
+    "DEVEM", "DIABO", "DIANTE", "DICAS", "DIETA", "DIGAM", "DIGNA", "DIGNO", "DIQUE", "DISCO",
+    "DIULA", "DIVAS", "DIZER", "DIZEM", "DOBRA", "DOBRE", "DOCES", "DOGMA", "DOIDO", "DOLAR",
+    "DOMAR", "DONAS", "DORSO", "DOSE", "DRAMA", "DROGA", "DUBIO", "DUELO", "DUETO", "DUNAS",
+    "DUPLO", "DUQUE", "DURAS", "EBANO", "EDEMA", "EDITA", "EGIDE", "EGITO", "EIVAI", "EIXOS",
+    "ELEVA", "ELIDA", "ELIDE", "ELITE", "ELMOS", "EMAIL", "EMITA", "EMPOS", "ENCER", "ENJOO",
+    "ENSAR", "ENSEJO", "ENTAO", "ENTRA", "ENTRE", "ENVIA", "ENVIO", "EPICO", "EPIST", "EPOCA",
+    "ERGAS", "ERROS", "ESCOE", "ESMAA", "ESTAO", "ESTAR", "ESTIA", "ESTIO", "ETICA", "ETNIA",
+    "EXAME", "EXARA", "EXATA", "EXATO", "EXIBA", "EXIGE", "EXIJO", "EXIME", "EXITO", "EXODO",
+    "EXPOR", "FABRO", "FACAO", "FACIL", "FALAR", "FALAS", "FALHA", "FALIR", "FALTA", "FALSO",
+    "FAMOS", "FARAO", "FARDA", "FARDO", "FAROL", "FARPA", "FARTO", "FATAL", "FATOR", "FATOS",
+    "FATUO", "FAUNA", "FAVOR", "FAZER", "FEIAS", "FEIRA", "FEITA", "FEITO", "FEIXE", "FELIZ",
+    "FENDA", "FERIR", "FEROZ", "FERRO", "FERVE", "FESTA", "FEUDO", "FIADO", "FIAIS", "FIAPO",
+    "FICHA", "FICAR", "FIEIS", "FILAS", "FILHO", "FILME", "FINAL", "FINOS", "FINTA", "FIRMA",
+    "FITA", "FIXAR", "FLORA", "FLUIR", "FLUXO", "FOCAO", "FOCAR", "FOFAS", "FOFOCA", "FOGAO",
+    "FOLGA", "FOLHA", "FOLIA", "FOLIO", "FONTE", "FORAM", "FORCA", "FORMA", "FORTE", "FOSCO",
+    "FOSSE", "FOSSO", "FRACO", "FRADE", "FRASE", "FREIO", "FRETE", "FREVO", "FRITA", "FROTA",
+    "FRUTA", "FUGAZ", "FUGIR", "FUNDO", "FUNES", "FUNIL", "FURAR", "FURIA", "FUROU", "FUSCA",
+    "FUTIL", "FUZIL", "GADUA", "GAIAS", "GALHO", "GAMA", "GANHO", "GARBO", "GARRA", "GASTO",
+    "GATAS", "GEDAS", "GELO", "GEMA", "GENIO", "GENRO", "GENTE", "GERAI", "GERAL", "GERIA",
+    "GERIR", "GESTO", "GINGA", "GIRAR", "GLEBA", "GLOBO", "GOLFE", "GOLFO", "GOLPE", "GORRO",
+    "GOSMA", "GOSTA", "GRACA", "GRAMA", "GRANA", "GRATO", "GRAUS", "GRIFO", "GRIPE", "GRUPO",
+    "GRUTA", "GUIAR", "GUIZO", "GURIA", "HABIL", "HASTE", "HAURE", "HAVER", "HAVIA", "HEROI",
+    "HIENA", "HINOS", "HIRTO", "HONRA", "HORDA", "HORTO", "HOTEL", "HUMOR", "ICACO", "ICONE",
+    "IDEAR", "IDEIA", "IDEAL", "IDOLA", "IDOLO", "IDONE", "IDOSO", "IGNES", "IGUAL", "ILHAS",
+    "ILESO", "IMITA", "IMPOR", "IMUNE", "INCHA", "INCOE", "INCAS", "INDEZ", "INDIO", "INGER",
+    "INIBA", "INATO", "IOGUE", "IRADO", "IRIS", "ISPIO", "ITENS", "JABOS", "JANTA", "JASPE",
+    "JAULA", "JAZIA", "JECAS", "JEDAS", "JEITO", "JEJUM", "JEMBE", "JIPES", "JOGAR", "JOGOS",
+    "JOIAS", "JOVEM", "JUIZA", "JUIZO", "JULGO", "JUNCO", "JUNTA", "JUROS", "JURAR", "JURIA",
+    "JUROU", "JUSTO", "LABOR", "LAGOS", "LAICO", "LAMBA", "LAMES", "LAMPA", "LANAR", "LAPIS",
+    "LAPSO", "LARGO", "LARVA", "LATES", "LATIR", "LAVOR", "LAZER", "LEAIS", "LEGAL", "LEIGO",
+    "LEITE", "LEITO", "LENDA", "LENTO", "LESMA", "LESAO", "LETAL", "LETRA", "LEVAR", "LIAME",
+    "LIDER", "LIMBO", "LIMPO", "LINDO", "LINHA", "LIRA", "LIRAS", "LIVRE", "LIVRO", "LIXAO",
+    "LOCAO", "LOCAL", "LOCUS", "LOGAR", "LOGRA", "LOGRO", "LOIRA", "LOMBA", "LONGO", "LOTES",
+    "LOUCA", "LOUCO", "LUCRO", "LUGAR", "LUNAR", "LUTAR", "LUXAR", "LUXOS", "LUVAS", "MACAR",
+    "MACAO", "MACIA", "MACIO", "MAIOR", "MAJOR", "MAGIA", "MAGNA", "MAGOA", "MALES", "MALHA",
+    "MALSA", "MANCO", "MANDA", "MANGA", "MANIA", "MANSA", "MANSO", "MANTO", "MAOME", "MARCO",
+    "MARRA", "MASSA", "MATE", "MATIZ", "MEADA", "MECHA", "MEDIA", "MEDIR", "MEDOS", "MEIGO",
+    "MEIOS", "MEIAS", "MELAO", "MEMIS", "MENOR", "MENOS", "MESAS", "MESMO", "METAL", "METIA",
+    "METRO", "MEXER", "MIDIA", "MILHA", "MILHO", "MIOLO", "MISSA", "MISTO", "MITOS", "MOCAS",
+    "MODA", "MOFOS", "MOIRA", "MOLES", "MONGE", "MORAL", "MORTE", "MORRO", "MORRE", "MOTIM",
+    "MOTOS", "MOVEL", "MUDAR", "MUITO", "MUNDO", "MURAL", "MUROS", "MURRA", "MUSEU", "MUSGO",
+    "MUTUA", "MUTUO", "NACAO", "NADAR", "NADIR", "NAFTA", "NANOS", "NARRA", "NASCE", "NATAL",
+    "NATAS", "NAVAL", "NAVIO", "NEGAR", "NEGA", "NEGRO", "NESGA", "NESSA", "NESTA", "NETOS",
+    "NEVE", "NICHO", "NIEVE", "NINFAS", "NINHO", "NIVEL", "NOBRE", "NOITE", "NOIVA", "NOME",
+    "NORMA", "NORTE", "NOSSA", "NOSSO", "NOTAR", "NOTAS", "NULAS", "NULOS", "NUNCA", "NUVEM",
+    "NUDEZ", "OBESO", "OBICE", "OBRAS", "OBTER", "OBVIO", "OBSTA", "OCIOS", "OCREM", "ODIAR",
+    "OITIS", "OLHAM", "OLHAR", "OLHOS", "ONTEM", "OPACO", "OPIAM", "OPTAR", "OPTAS", "ORCAS",
+    "ORDEM", "ORGAO", "ORNES", "OSSOS", "OTICA", "OTICO", "OTIMO", "OUFAS", "OUCAS", "OUSAR",
+    "OUSAS", "OUTRO", "OUVEM", "OUVIR", "OVAIS", "OXALA", "PACOS", "PADEI", "PAGAR", "PAGUE",
+    "PALCO", "PALHA", "PAMPA", "PANCA", "PANGA", "PANOS", "PAPEL", "PARCO", "PARDA", "PARES",
+    "PARIA", "PARTE", "PASMO", "PASSA", "PASSE", "PASSO", "PASTA", "PATAS", "PATIO", "PAUSA",
+    "PAUTA", "PAZES", "PECHA", "PEDRA", "PEITO", "PEIXE", "PELOS", "PELVE", "PENSO", "PERCO",
+    "PERNA", "PESAM", "PESAR", "PESCA", "PIADA", "PIAVA", "PICAR", "PICHE", "PIFAS", "PIFIO",
+    "PILHA", "PINOS", "PINTA", "PIRAI", "PIRES", "PISTA", "PLACA", "PLENA", "PLUMO", "PNEUS",
+    "POCAS", "PODAR", "PODER", "POEMA", "POLAR", "PONDE", "PONTE", "PONTO", "PORAO", "POREM",
+    "PORTA", "POSAM", "POSSE", "POSSO", "POSTO", "POUCO", "POUSO", "PRACA", "PRADO", "PRAIA",
+    "PRATO", "PRAZO", "PRECE", "PREGO", "PRECO", "PRIVE", "PROLE", "PROSA", "PROVA", "PRUMO",
+    "PUDER", "PUDIM", "PULAR", "PUNHO", "PUNES", "PURAS", "PURGA", "PUROS", "PUXAR", "QUASE",
+    "QUERO", "QUICA", "QUILO", "QUOTA", "RACAM", "RADAR", "RAIAR", "RAIVA", "RALAR", "RAMOS",
+    "RAMPA", "RANCO", "RANGO", "RAPAZ", "RAPTA", "RAROS", "RASOS", "RAZAO", "REAGIR", "REATA",
+    "RECUO", "REGRA", "REINO", "RELVA", "RENDA", "RENTE", "RETER", "REVER", "REVES", "REZAR",
+    "REZAS", "REZEI", "RICOS", "RIFAS", "RIGOR", "RISCO", "RITMO", "RODAS", "ROGAR", "RONCA",
+    "ROSAS", "ROTOS", "ROUCO", "ROUPA", "RUBRO", "RUINA", "RUMOR", "RURAL", "SABER", "SABIA",
+    "SABIO", "SABOR", "SAGAO", "SAGAZ", "SAIAS", "SAIDA", "SAIRA", "SALSA", "SALTO", "SALVA",
+    "SALVO", "SANAR", "SANTO", "SAQUE", "SARAR", "SARGA", "SARJA", "SASSE", "SATIS", "SAUDA",
+    "SAUDE", "SEARA", "SECAO", "SEGUE", "SEIOS", "SEITA", "SEIVA", "SELAR", "SELVA", "SENAO",
+    "SENDA", "SENDO", "SENIL", "SENSO", "SENTA", "SERES", "SERIA", "SERIE", "SERRA", "SESTA",
+    "SETAS", "SEXTA", "SEXTO", "SICAR", "SIGLA", "SIGILO", "SINAL", "SINOS", "SINTO", "SIRVA",
+    "SITUA", "SOBRE", "SOCAR", "SOCIO", "SODIO", "SOFAS", "SOLAR", "SOLTO", "SOMAR", "SONDA",
+    "SONHO", "SOPRA", "SORRI", "SORTE", "SOVAR", "STAND", "SUADA", "SUAVE", "SUBIR", "SUCOS",
+    "SUECO", "SUETA", "SUGOU", "SUJOS", "SUMIR", "SUPER", "SURRA", "SUTIL", "SUTIA", "TACAR",
+    "TACAS", "TACAO", "TALAS", "TALAO", "TALCO", "TANGA", "TANGE", "TANTA", "TAPAR", "TARDE",
+    "TARJA", "TATOS", "TAXAS", "TECEL", "TECNO", "TELAS", "TELHA", "TEMOR", "TEMOS", "TEMPO",
+    "TENAZ", "TENDO", "TENRA", "TENSO", "TENTO", "TENUE", "TERAS", "TERCO", "TERMO", "TERNO",
+    "TERRA", "TESAO", "TESTE", "TIGRE", "TINHA", "TINTA", "TIRAR", "TITIO", "TIVER", "TOCAR",
+    "TOCAS", "TODOS", "TOLOS", "TONEL", "TONTO", "TOPAM", "TOPAR", "TORCO", "TORPE", "TORTO",
+    "TOUCA", "TOURO", "TRACO", "TRAIR", "TRAJE", "TRAMA", "TRATO", "TRELA", "TRENS", "TREVA",
+    "TREVO", "TRIGO", "TROCA", "TROLE", "TROPA", "TRUCO", "TRUPE", "TUBOS", "TUMBA", "TUNEL",
+    "TURVO", "UIVOS", "UMEDO", "UNIAO", "UNICO", "UNIDA", "UNIR", "URBAN", "URGIR", "URNAS",
+    "UTERO", "VAGAS", "VAGEM", "VAGUE", "VALHA", "VALOR", "VALSA", "VARAO", "VARAR", "VARAS",
+    "VARRE", "VASTA", "VASTO", "VAZAS", "VAZIO", "VEDAR", "VEDOU", "VELAM", "VELEI", "VELHO",
+    "VELOZ", "VEMOS", "VENAL", "VENDA", "VENDO", "VENHA", "VENTO", "VERAO", "VERBA", "VERBO",
+    "VERGA", "VERSO", "VETOR", "VIDAS", "VIDEO", "VIGOR", "VIMOS", "VINHO", "VIRAR", "VIRIA",
+    "VIRIL", "VIROU", "VIRUS", "VISAM", "VISAO", "VISAR", "VISTA", "VISTO", "VIUVA", "VIVAZ",
+    "VIVER", "VOCAL", "VOLTA", "VOLTE", "VOTOS", "VULGO", "VULTO", "XINGA", "XISTO", "XUCRO",
+    "ZANGA", "ZIPER", "ZUMBI"
+];
+
+// === ESTADO ===
+let currentRoomId = null;
+let currentRow = 0;
+let currentTile = 0;
+let currentGuess = "";
+let isGameActive = false;
+let isRoundSolved = false;
+let myPlayerId = null;
+
+// Estado do Chat
+let isChatVisible = true;
+let silencedPlayers = new Set(); 
+
+// === DOM ===
+const screens = {
+    login: document.getElementById('login-screen'),
+    lobby: document.getElementById('lobby-screen'),
+    game: document.getElementById('game-screen')
+};
+
+const messageArea = document.getElementById('message-area');
+const chatInput = document.getElementById('chat-input');
+const chatSendBtn = document.getElementById('btn-send-chat');
+const chatToggleBtn = document.getElementById('btn-toggle-chat'); 
+const chatContainer = document.getElementById('chat-container');
+
+// Modais e Botões
+const leaveBtn = document.getElementById('btn-leave-match');
+const leaveModal = document.getElementById('confirm-leave-overlay');
+const cancelLeaveBtn = document.getElementById('btn-cancel-leave');
+const confirmLeaveBtn = document.getElementById('btn-confirm-leave');
+
+// === LISTENERS ===
+
+document.getElementById('btn-create').addEventListener('click', () => {
+    const name = document.getElementById('username').value.trim();
+    const isPublic = document.getElementById('public-room-check').checked;
+    if (!name) return alert('Por favor, digite seu nome!');
+    socket.emit('createRoom', { playerName: name, isPublic: isPublic });
+});
+
+document.getElementById('btn-join').addEventListener('click', () => {
+    const name = document.getElementById('username').value.trim();
+    const code = document.getElementById('room-code-input').value.trim();
+    if (!name || !code) return alert('Digite nome e código!');
+    socket.emit('joinRoom', { roomId: code, playerName: name });
+});
+
+// Iniciar Jogo com Modo Selecionado
+document.getElementById('btn-start-game').addEventListener('click', () => {
+    const modeSelect = document.querySelector('input[name="game-mode"]:checked');
+    const selectedMode = modeSelect ? modeSelect.value : 'default';
+    socket.emit('startGame', { roomId: currentRoomId, gameMode: selectedMode });
+});
+
+document.getElementById('btn-restart').addEventListener('click', () => {
+    location.reload();
+});
+
+// === CONTROLES DE CHAT ===
+
+// 1. Alternar Visibilidade do Chat
+if(chatToggleBtn) {
+    chatToggleBtn.addEventListener('click', () => {
+        isChatVisible = !isChatVisible;
+        const icon = chatToggleBtn.querySelector('.material-icons');
+        if (isChatVisible) {
+            chatContainer.style.display = 'flex';
+            icon.innerText = 'chat';
+            chatToggleBtn.style.opacity = '1';
+        } else {
+            chatContainer.style.display = 'none';
+            icon.innerText = 'chat_bubble_outline';
+            chatToggleBtn.style.opacity = '0.5';
+        }
+    });
+}
+
+// 2. Função Global para Silenciar
+window.toggleMute = function(playerId, btnElement) {
+    if (playerId === myPlayerId) return;
+
+    if (silencedPlayers.has(playerId)) {
+        silencedPlayers.delete(playerId);
+        btnElement.innerText = 'volume_up';
+        btnElement.style.color = '#888';
+    } else {
+        silencedPlayers.add(playerId);
+        btnElement.innerText = 'volume_off';
+        btnElement.style.color = '#e11d48';
+    }
+};
+
+function sendChatMessage() {
+    const msg = chatInput.value.trim();
+    if (!msg) return;
+    socket.emit('chatMessage', { roomId: currentRoomId, msg: msg });
+    chatInput.value = "";
+    chatInput.focus();
+}
+if(chatSendBtn) chatSendBtn.addEventListener('click', sendChatMessage);
+if(chatInput) chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
+
+// === SAÍDA ===
+if(leaveBtn) leaveBtn.addEventListener('click', () => leaveModal.classList.remove('hidden'));
+if(cancelLeaveBtn) cancelLeaveBtn.addEventListener('click', () => leaveModal.classList.add('hidden'));
+if(confirmLeaveBtn) confirmLeaveBtn.addEventListener('click', () => {
+    leaveModal.classList.add('hidden');
+    socket.emit('leaveMatch', currentRoomId);
+});
+socket.on('matchLeft', () => window.location.reload());
+
+// === SOCKET EVENTOS ===
+
+socket.on('roomJoined', (data) => {
+    currentRoomId = data.roomId;
+    myPlayerId = data.playerId;
+    switchScreen('lobby');
+    document.getElementById('lobby-code').innerText = data.roomId;
+    
+    // Controles do Host
+    const hostControls = document.getElementById('host-controls');
+    const waitingMsg = document.getElementById('waiting-msg');
+    
+    if (data.isHost) {
+        if(hostControls) hostControls.style.display = 'block';
+        if(waitingMsg) waitingMsg.style.display = 'none';
+    } else {
+        if(hostControls) hostControls.style.display = 'none';
+        if(waitingMsg) waitingMsg.style.display = 'block';
+    }
+});
+
+socket.on('updateRoomList', (availableRooms) => {
+    const listContainer = document.getElementById('room-list-items');
+    if (!listContainer) return;
+    listContainer.innerHTML = ''; 
+    if (availableRooms.length === 0) {
+        listContainer.innerHTML = '<p style="color: #666; font-size: 0.9rem;">Nenhuma sala pública encontrada.</p>';
+        return;
+    }
+    availableRooms.forEach(room => {
+        const div = document.createElement('div');
+        div.className = 'room-item';
+        const modeBadge = room.gameMode === 'competitive' ? '🏆 Competitivo' : '⚔️ Battle Royale';
+        div.innerHTML = `
+            <div class="room-info">
+                <strong>${room.hostName} <span style="font-size:0.7em; color:#eab308">${modeBadge}</span></strong>
+                <span>${room.playerCount}/${room.maxPlayers} Jogadores</span>
+            </div>
+            <button class="btn-join-room">ENTRAR</button>
+        `;
+        div.addEventListener('click', () => {
+            document.getElementById('room-code-input').value = room.id;
+            const nameInput = document.getElementById('username');
+            if(!nameInput.value) nameInput.focus();
+            else document.getElementById('btn-join').focus();
+        });
+        listContainer.appendChild(div);
+    });
+});
+
+socket.on('updatePlayerList', (players) => {
+    updateLobbyList(players);
+    updateGameScoreboard(players);
+});
+socket.on('updateScoreboard', (players) => {
+    updateGameScoreboard(players);
+});
+socket.on('gameStarted', () => {
+    switchScreen('game');
+    createGrid();
+    chatInput.disabled = false;
+    chatSendBtn.disabled = false;
+});
+
+// Handler de Chat
+socket.on('chatMessage', (data) => {
+    if (silencedPlayers.has(data.playerId)) return;
+
+    const chatBox = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'chat-usr-msg';
+    
+    let muteControl = '';
+    if (data.playerId !== myPlayerId) {
+        muteControl = `<span class="material-icons mute-btn" onclick="toggleMute('${data.playerId}', this)" title="Silenciar">volume_up</span>`;
+    }
+
+    div.innerHTML = `${muteControl} <span class="chat-name">${data.playerName}:</span> ${data.msg}`;
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+});
+
+socket.on('newRound', (data) => {
+    resetRoundUI(data.roundNumber, data.totalRounds);
+    isGameActive = true;
+    isRoundSolved = false;
+});
+socket.on('timerUpdate', (time) => {
+    const timerEl = document.getElementById('timer');
+    if(timerEl) {
+        timerEl.innerText = time;
+        timerEl.style.color = time <= 10 ? '#e11d48' : '#eab308';
+    }
+});
+socket.on('guessResult', ({ guess, result }) => {
+    paintRow(currentRow, guess, result);
+    updateKeyboard(guess, result);
+    const isCorrect = result.every(r => r === 'correct');
+    if (isCorrect) {
+        isRoundSolved = true;
+        showMessage("VOCÊ ACERTOU!", "#22c55e");
+    } else {
+        currentRow++;
+        currentTile = 0;
+        currentGuess = "";
+        if (currentRow >= 6) {
+            isGameActive = false;
+            showMessage("FIM DAS TENTATIVAS", "#e11d48");
+        }
+    }
+});
+socket.on('roundSuccess', (msg) => { setTimeout(() => { showMessage(msg, "#22c55e"); }, 1500); });
+socket.on('roundEnded', (word) => { isGameActive = false; if(!isRoundSolved) showMessage(`A palavra era: ${word}`, "#ffffff"); });
+socket.on('gameOver', (players) => {
+    const overlay = document.getElementById('game-over-overlay');
+    const resultsDiv = document.getElementById('final-results');
+    const title = document.getElementById('game-over-title');
+    players.sort((a, b) => b.score - a.score);
+    const winner = players[0];
+    if(title) title.innerHTML = `<span style="color:#eab308">${winner.name}</span> É O GOAT 🐐`;
+    resultsDiv.innerHTML = players.map((p, i) => `<div style="margin: 10px; font-size: 1.2rem;">${i===0 ? '👑' : `#${i+1}`} <strong>${p.name}</strong>: ${p.score} pts</div>`).join('');
+    overlay.classList.remove('hidden');
+});
+socket.on('error', (msg) => alert(msg));
+
+// UI FUNCTIONS
+function switchScreen(screenName) {
+    Object.values(screens).forEach(s => s.classList.remove('active'));
+    screens[screenName].classList.add('active');
+}
+function updateLobbyList(players) {
+    const list = document.getElementById('player-list-lobby');
+    if(list) list.innerHTML = players.map(p => `<li>${p.name}</li>`).join('');
+}
+function updateGameScoreboard(players) {
+    const list = document.getElementById('live-score-list');
+    if (!list) return;
+    players.sort((a, b) => b.score - a.score);
+    list.innerHTML = players.map((p, i) => `<li><span>${i+1}. ${p.name}</span><span style="font-weight:bold; color:#eab308">${p.score}</span></li>`).join('');
+}
+function createGrid() {
+    const grid = document.getElementById('grid');
+    if(!grid) return;
+    grid.innerHTML = '';
+    for (let i = 0; i < 6; i++) {
+        const row = document.createElement('div');
+        row.className = 'grid-row';
+        for (let j = 0; j < 5; j++) {
+            const tile = document.createElement('div');
+            tile.className = 'tile';
+            tile.id = `tile-${i}-${j}`;
+            row.appendChild(tile);
+        }
+        grid.appendChild(row);
+    }
+}
+function resetRoundUI(round, total) {
+    currentRow = 0;
+    currentTile = 0;
+    currentGuess = "";
+    document.getElementById('round-display').innerText = `${round}/${total}`;
+    messageArea.innerText = "";
+    messageArea.style.opacity = "0";
+    document.querySelectorAll('.tile').forEach(t => { t.innerText = ''; t.className = 'tile'; t.style.animation = 'none'; t.style.transform = 'none'; });
+    document.querySelectorAll('#keyboard button').forEach(btn => { const key = btn.dataset.key; btn.className = (key === 'ENTER' || key === 'BACKSPACE') ? 'wide-key action-btn' : ''; });
+}
+function showMessage(msg, color="white") {
+    messageArea.innerText = msg;
+    messageArea.style.color = color;
+    messageArea.style.opacity = '1';
+}
+document.addEventListener('keydown', (e) => {
+    if (!isGameActive || isRoundSolved) return;
+    if (document.activeElement === chatInput) return;
+    const key = e.key.toUpperCase();
+    if (key === 'ENTER') handleInput('ENTER');
+    else if (key === 'BACKSPACE') handleInput('BACKSPACE');
+    else if (/^[A-Z]$/.test(key)) handleInput(key);
+});
+document.querySelectorAll('#keyboard button').forEach(btn => {
+    btn.addEventListener('click', (e) => { e.preventDefault(); if (!isGameActive || isRoundSolved) return; handleInput(btn.dataset.key); });
+});
+function handleInput(key) {
+    if (key === 'ENTER') { submitGuess(); return; }
+    if (key === 'BACKSPACE') {
+        if (currentTile > 0) { currentTile--; currentGuess = currentGuess.slice(0, -1); const tile = document.getElementById(`tile-${currentRow}-${currentTile}`); tile.innerText = ''; tile.classList.remove('filled'); }
+        return;
+    }
+    if (currentTile < 5) { const tile = document.getElementById(`tile-${currentRow}-${currentTile}`); tile.innerText = key; tile.classList.add('filled'); currentGuess += key; currentTile++; }
+}
+function submitGuess() {
+    if (currentGuess.length !== 5) { showMessage("Muito curta!", "#eab308"); setTimeout(() => { if(messageArea.innerText === "Muito curta!") { messageArea.innerText = ""; messageArea.style.opacity = "0"; } }, 1500); return; }
+    if (!CLIENT_WORDS.includes(currentGuess)) {
+        showMessage("Palavra inválida", "#e11d48");
+        const row = document.querySelector(`#grid .grid-row:nth-child(${currentRow + 1})`);
+        row.style.transform = "translateX(5px)"; setTimeout(() => row.style.transform = "translateX(-5px)", 100); setTimeout(() => row.style.transform = "none", 200);
+        setTimeout(() => { if (messageArea.innerText === "Palavra inválida") { messageArea.innerText = ""; messageArea.style.opacity = "0"; } }, 1500);
+        return;
+    }
+    socket.emit('submitGuess', { roomId: currentRoomId, guess: currentGuess });
+}
+function paintRow(rowIdx, guess, result) {
+    for (let i = 0; i < 5; i++) { const tile = document.getElementById(`tile-${rowIdx}-${i}`); setTimeout(() => { tile.classList.add(result[i]); tile.style.animation = "pop 0.3s ease"; }, i * 150); }
+}
+function updateKeyboard(guess, result) {
+    for (let i = 0; i < 5; i++) {
+        const letter = guess[i]; const status = result[i]; const btn = document.querySelector(`button[data-key="${letter}"]`);
+        if (btn) {
+            if (status === 'correct') btn.className = 'correct';
+            else if (status === 'present' && !btn.classList.contains('correct')) btn.className = 'present';
+            else if (status === 'absent' && !btn.classList.contains('correct') && !btn.classList.contains('present')) btn.className = 'absent';
+        }
+    }
+}
