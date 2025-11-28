@@ -460,7 +460,7 @@ const WORDS = [
     "OUTRA", "OUTRO", "OUVEM", "OUVIA", "OUVIR", "OUVIU", "OVADA", "OVADO", "OVAIS", "OVALO",
     "OVANO", "OVENS", "OVEVA", "OVIDE", "OVINO", "OVNIS", "OVULO", "OXALA", "OXIDA", "OXIDE",
     "OXIDO", "OXIMA", "OXINA", "OXOCE", "OZENA", "OZONA", "OZONE", "PITUA", "PITUI", "PIUBA",
-    "PIUCA", "PIUNA", "PIXEL", "PIXEU", "PIXUA", "PIZZA", "PLACA", "PLACE", "PLAGA", "PLANA",
+    "PISCA", "PINTO", "PASTO", "MASSA", "MILTO", "PISTA", "PIUCA", "PIUNA", "PIXEL", "PIXEU", "PIXUA", "PIZZA", "PLACA", "PLACE", "PLAGA", "PLANA",
     "PLANO", "PLATO", "PLAYS", "PLEBE", "PLENA", "PLENO", "PLEXO", "PLICA", "PLOTZ", "PLUMA",
     "PLUSH", "PLUTO", "PNEUS", "POACU", "POAIA", "POBRE", "POCAO", "POCAR", "POCAS", "POCHE",
     "POCOS", "PODAL", "PODAO", "PODAR", "PODAS", "PODEM", "PODER", "PODES", "PODIA", "PODIO",
@@ -931,4 +931,27 @@ function handleInput(key) {
     if (currentTile < 5) { const tile = document.getElementById(`tile-${currentRow}-${currentTile}`); tile.innerText = key; tile.classList.add('filled'); currentGuess += key; currentTile++; }
 }
 function submitGuess() {
-    if (currentGues
+    if (currentGuess.length !== 5) { showMessage("Muito curta!", "#eab308"); setTimeout(() => { if(messageArea.innerText === "Muito curta!") { messageArea.innerText = ""; messageArea.style.opacity = "0"; } }, 1500); return; }
+    if (!CLIENT_WORDS.includes(currentGuess)) {
+        showMessage("Palavra inválida", "#e11d48");
+        const row = document.querySelector(`#grid .grid-row:nth-child(${currentRow + 1})`);
+        row.style.transform = "translateX(5px)"; setTimeout(() => row.style.transform = "translateX(-5px)", 100); setTimeout(() => row.style.transform = "none", 200);
+        setTimeout(() => { if (messageArea.innerText === "Palavra inválida") { messageArea.innerText = ""; messageArea.style.opacity = "0"; } }, 1500);
+        return;
+    }
+    socket.emit('submitGuess', { roomId: currentRoomId, guess: currentGuess });
+}
+function paintRow(rowIdx, guess, result) {
+    for (let i = 0; i < 5; i++) { const tile = document.getElementById(`tile-${rowIdx}-${i}`); setTimeout(() => { tile.classList.add(result[i]); tile.style.animation = "pop 0.3s ease"; }, i * 150); }
+}
+function updateKeyboard(guess, result) {
+    for (let i = 0; i < 5; i++) {
+        const letter = guess[i]; const status = result[i]; const btn = document.querySelector(`button[data-key="${letter}"]`);
+        if (btn) {
+            if (status === 'correct') btn.className = 'correct';
+            else if (status === 'present' && !btn.classList.contains('correct')) btn.className = 'present';
+            else if (status === 'absent' && !btn.classList.contains('correct') && !btn.classList.contains('present')) btn.className = 'absent';
+        }
+    }
+}
+
