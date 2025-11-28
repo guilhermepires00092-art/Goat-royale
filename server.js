@@ -460,7 +460,7 @@ const WORDS = [
     "OUTRA", "OUTRO", "OUVEM", "OUVIA", "OUVIR", "OUVIU", "OVADA", "OVADO", "OVAIS", "OVALO",
     "OVANO", "OVENS", "OVEVA", "OVIDE", "OVINO", "OVNIS", "OVULO", "OXALA", "OXIDA", "OXIDE",
     "OXIDO", "OXIMA", "OXINA", "OXOCE", "OZENA", "OZONA", "OZONE", "PITUA", "PITUI", "PIUBA",
-    "PISCA", "PINTO", "PASTO", "MASSA", "MILTO", "PISTA", "PIUCA", "PIUNA", "PIXEL", "PIXEU", "PIXUA", "PIZZA", "PLACA", "PLACE", "PLAGA", "PLANA",
+    "PIUCA", "PIUNA", "PIXEL", "PIXEU", "PIXUA", "PIZZA", "PLACA", "PLACE", "PLAGA", "PLANA",
     "PLANO", "PLATO", "PLAYS", "PLEBE", "PLENA", "PLENO", "PLEXO", "PLICA", "PLOTZ", "PLUMA",
     "PLUSH", "PLUTO", "PNEUS", "POACU", "POAIA", "POBRE", "POCAO", "POCAR", "POCAS", "POCHE",
     "POCOS", "PODAL", "PODAO", "PODAR", "PODAS", "PODEM", "PODER", "PODES", "PODIA", "PODIO",
@@ -954,4 +954,3 @@ function updateKeyboard(guess, result) {
         }
     }
 }
-
