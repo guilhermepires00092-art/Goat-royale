@@ -2,10 +2,11 @@ const socket = io();
 
 // ===========================================================================
 // ÁREA DE COLAGEM DA LISTA DE PALAVRAS (CLIENTE)
-// Cole a MESMA lista que está no server.js aqui.
+// COLE AQUI A MESMA LISTA DO SERVER.JS
 // ===========================================================================
 const CLIENT_WORDS = [
     
+    // >>> COLE AQUI A SUA LISTA GIGANTE DE PALAVRAS <<<
     "ABACA", "ABATA", "ABATE", "ABATI", "ABEBE", "ABECE", "ABEDO", "ABETA", "ABETE", "ABETO",
     "ABEXI", "ABICO", "ABIDO", "ABIET", "ABIGA", "ABILA", "ABITA", "ABJEO", "ABOAR", "ABOAS",
     "ABOCA", "ABOFE", "ABOIO", "ABOIS", "ABOLE", "ABOLI", "ABONA", "ABONO", "ABOOI", "ABOOU",
@@ -614,23 +615,22 @@ const CLIENT_WORDS = [
     "ZONAL", "ZONAR", "ZONAS", "ZONZO", "ZOOMS", "ZOOSE", "ZORRA", "ZORRO", "ZUAVO", "ZUMBA",
     "ZUMBE", "ZUMBI", "ZUMBO", "ZUNDA", "ZUNGA", "ZUNGU", "ZUNHI", "ZUNIR", "ZUNIU", "ZUNJA",
     "ZUPAR", "ZURNA", "ZURRA", "ZURRE", "ZURRO", "ZURUO", "ZURZE", "MASSA", "MARTE", "MILTO", "PASSA", "PASSO", "PISCA"
-
 ];
 
 // === ESTADO ===
 let currentRoomId = null;
 let currentRow = 0;
-let currentTile = 0;
-let currentGuess = "";
+// Usando Array para permitir edição
+let currentGuessArray = ["", "", "", "", ""];
+// Índice da letra ativa (cursor)
+let activeTileIndex = 0;
+
 let isGameActive = false;
 let isRoundSolved = false;
 let myPlayerId = null;
-
-// Estado do Chat
 let isChatVisible = true;
 let silencedPlayers = new Set(); 
 
-// === DOM ===
 const screens = {
     login: document.getElementById('login-screen'),
     lobby: document.getElementById('lobby-screen'),
@@ -643,11 +643,22 @@ const chatSendBtn = document.getElementById('btn-send-chat');
 const chatToggleBtn = document.getElementById('btn-toggle-chat'); 
 const chatContainer = document.getElementById('chat-container');
 
-// Modais e Botões
 const leaveBtn = document.getElementById('btn-leave-match');
 const leaveModal = document.getElementById('confirm-leave-overlay');
 const cancelLeaveBtn = document.getElementById('btn-cancel-leave');
 const confirmLeaveBtn = document.getElementById('btn-confirm-leave');
+const shareBtn = document.getElementById('btn-share-room');
+
+// === INICIALIZAÇÃO (LINK COMPARTILHADO) ===
+window.addEventListener('DOMContentLoaded', () => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomCode = urlParams.get('room');
+    if (roomCode) {
+        const roomInput = document.getElementById('room-code-input');
+        if(roomInput) roomInput.value = roomCode;
+        document.getElementById('username').focus();
+    }
+});
 
 // === LISTENERS ===
 
@@ -657,8 +668,7 @@ document.getElementById('btn-create').addEventListener('click', () => {
     const isPublic = checkbox ? checkbox.checked : false;
     
     if (!name) return alert('Por favor, digite seu nome!');
-    if (CLIENT_WORDS.length === 0) return alert('ERRO: Lista de palavras vazia no script.js!');
-
+    if (CLIENT_WORDS.length < 2) console.warn('Lista vazia no script.js');
     socket.emit('createRoom', { playerName: name, isPublic: isPublic });
 });
 
@@ -669,20 +679,34 @@ document.getElementById('btn-join').addEventListener('click', () => {
     socket.emit('joinRoom', { roomId: code, playerName: name });
 });
 
-// Iniciar Jogo com Modo Selecionado
 document.getElementById('btn-start-game').addEventListener('click', () => {
     const modeSelect = document.querySelector('input[name="game-mode"]:checked');
     const selectedMode = modeSelect ? modeSelect.value : 'default';
     socket.emit('startGame', { roomId: currentRoomId, gameMode: selectedMode });
 });
 
+// Lógica "Jogar Novamente"
 document.getElementById('btn-restart').addEventListener('click', () => {
-    location.reload();
+    document.getElementById('game-over-overlay').classList.add('hidden');
+    switchScreen('lobby');
+    resetRoundUI('1', '10'); 
+    const grid = document.getElementById('grid');
+    if(grid) grid.innerHTML = ''; 
 });
 
-// === CONTROLES DE CHAT ===
+// Compartilhar Link
+if (shareBtn) {
+    shareBtn.addEventListener('click', () => {
+        const link = `${window.location.origin}/?room=${currentRoomId}`;
+        navigator.clipboard.writeText(link).then(() => {
+            const originalText = shareBtn.innerHTML;
+            shareBtn.innerHTML = '<span class="material-icons">check</span> Copiado!';
+            setTimeout(() => { shareBtn.innerHTML = originalText; }, 2000);
+        }).catch(err => { prompt("Copie o link:", link); });
+    });
+}
 
-// 1. Alternar Visibilidade do Chat
+// Controles Chat
 if(chatToggleBtn) {
     chatToggleBtn.addEventListener('click', () => {
         isChatVisible = !isChatVisible;
@@ -699,10 +723,8 @@ if(chatToggleBtn) {
     });
 }
 
-// 2. Função Global para Silenciar
 window.toggleMute = function(playerId, btnElement) {
     if (playerId === myPlayerId) return;
-
     if (silencedPlayers.has(playerId)) {
         silencedPlayers.delete(playerId);
         btnElement.innerText = 'volume_up';
@@ -724,7 +746,7 @@ function sendChatMessage() {
 if(chatSendBtn) chatSendBtn.addEventListener('click', sendChatMessage);
 if(chatInput) chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
 
-// === SAÍDA ===
+// Saída
 if(leaveBtn) leaveBtn.addEventListener('click', () => leaveModal.classList.remove('hidden'));
 if(cancelLeaveBtn) cancelLeaveBtn.addEventListener('click', () => leaveModal.classList.add('hidden'));
 if(confirmLeaveBtn) confirmLeaveBtn.addEventListener('click', () => {
@@ -741,7 +763,9 @@ socket.on('roomJoined', (data) => {
     switchScreen('lobby');
     document.getElementById('lobby-code').innerText = data.roomId;
     
-    // Controles do Host
+    if(chatInput) chatInput.disabled = false;
+    if(chatSendBtn) chatSendBtn.disabled = false;
+    
     const hostControls = document.getElementById('host-controls');
     const waitingMsg = document.getElementById('waiting-msg');
     
@@ -797,19 +821,15 @@ socket.on('gameStarted', () => {
     chatSendBtn.disabled = false;
 });
 
-// Handler de Chat
 socket.on('chatMessage', (data) => {
     if (silencedPlayers.has(data.playerId)) return;
-
     const chatBox = document.getElementById('chat-messages');
     const div = document.createElement('div');
     div.className = 'chat-usr-msg';
-    
     let muteControl = '';
     if (data.playerId !== myPlayerId) {
         muteControl = `<span class="material-icons mute-btn" onclick="toggleMute('${data.playerId}', this)" title="Silenciar">volume_up</span>`;
     }
-
     div.innerHTML = `${muteControl} <span class="chat-name">${data.playerName}:</span> ${data.msg}`;
     chatBox.appendChild(div);
     chatBox.scrollTop = chatBox.scrollHeight;
@@ -836,8 +856,9 @@ socket.on('guessResult', ({ guess, result }) => {
         showMessage("VOCÊ ACERTOU!", "#22c55e");
     } else {
         currentRow++;
-        currentTile = 0;
-        currentGuess = "";
+        currentGuessArray = ["", "", "", "", ""];
+        activeTileIndex = 0;
+        updateGrid();
         if (currentRow >= 6) {
             isGameActive = false;
             showMessage("FIM DAS TENTATIVAS", "#e11d48");
@@ -858,7 +879,8 @@ socket.on('gameOver', (players) => {
 });
 socket.on('error', (msg) => alert(msg));
 
-// UI FUNCTIONS
+// === UI FUNCTIONS ===
+
 function switchScreen(screenName) {
     Object.values(screens).forEach(s => s.classList.remove('active'));
     screens[screenName].classList.add('active');
@@ -873,6 +895,7 @@ function updateGameScoreboard(players) {
     players.sort((a, b) => b.score - a.score);
     list.innerHTML = players.map((p, i) => `<li><span>${i+1}. ${p.name}</span><span style="font-weight:bold; color:#eab308">${p.score}</span></li>`).join('');
 }
+
 function createGrid() {
     const grid = document.getElementById('grid');
     if(!grid) return;
@@ -884,47 +907,148 @@ function createGrid() {
             const tile = document.createElement('div');
             tile.className = 'tile';
             tile.id = `tile-${i}-${j}`;
+            
+            // Evento de Clique
+            tile.addEventListener('click', () => {
+                if (!isGameActive || isRoundSolved) return;
+                if (i === currentRow) {
+                    activeTileIndex = j;
+                    updateGrid();
+                }
+            });
             row.appendChild(tile);
         }
         grid.appendChild(row);
     }
+    updateGrid();
 }
+
 function resetRoundUI(round, total) {
     currentRow = 0;
-    currentTile = 0;
-    currentGuess = "";
+    currentGuessArray = ["", "", "", "", ""];
+    activeTileIndex = 0;
+    
     document.getElementById('round-display').innerText = `${round}/${total}`;
     messageArea.innerText = "";
     messageArea.style.opacity = "0";
-    document.querySelectorAll('.tile').forEach(t => { t.innerText = ''; t.className = 'tile'; t.style.animation = 'none'; t.style.transform = 'none'; });
-    document.querySelectorAll('#keyboard button').forEach(btn => { const key = btn.dataset.key; btn.className = (key === 'ENTER' || key === 'BACKSPACE') ? 'wide-key action-btn' : ''; });
+    
+    document.querySelectorAll('.tile').forEach(t => { 
+        t.innerText = ''; 
+        t.className = 'tile'; 
+        t.style.animation = 'none'; 
+        t.style.transform = 'none'; 
+    });
+    document.querySelectorAll('#keyboard button').forEach(btn => { 
+        const key = btn.dataset.key; 
+        btn.className = (key === 'ENTER' || key === 'BACKSPACE') ? 'wide-key action-btn' : ''; 
+    });
+    updateGrid();
 }
+
 function showMessage(msg, color="white") {
     messageArea.innerText = msg;
     messageArea.style.color = color;
     messageArea.style.opacity = '1';
 }
+
+// Atualização Visual do Grid e Cursor
+function updateGrid() {
+    for (let j = 0; j < 5; j++) {
+        const tile = document.getElementById(`tile-${currentRow}-${j}`);
+        if (tile) {
+            tile.innerText = currentGuessArray[j];
+            tile.classList.remove('selected');
+            
+            if (j === activeTileIndex && isGameActive && !isRoundSolved) {
+                tile.classList.add('selected');
+            }
+            
+            if (currentGuessArray[j] !== "") {
+                tile.classList.add('filled');
+            } else {
+                tile.classList.remove('filled');
+            }
+        }
+    }
+}
+
+// CONTROLE DE INPUT
 document.addEventListener('keydown', (e) => {
     if (!isGameActive || isRoundSolved) return;
     if (document.activeElement === chatInput) return;
+    
+    if (e.key === 'ArrowLeft') {
+        if (activeTileIndex > 0) { activeTileIndex--; updateGrid(); }
+        return;
+    }
+    if (e.key === 'ArrowRight') {
+        if (activeTileIndex < 4) { activeTileIndex++; updateGrid(); }
+        return;
+    }
+
     const key = e.key.toUpperCase();
     if (key === 'ENTER') handleInput('ENTER');
     else if (key === 'BACKSPACE') handleInput('BACKSPACE');
-    else if (/^[A-Z]$/.test(key)) handleInput(key);
+    else if (/^[A-Z]$/.test(key) && key.length === 1) handleInput(key);
 });
+
 document.querySelectorAll('#keyboard button').forEach(btn => {
-    btn.addEventListener('click', (e) => { e.preventDefault(); if (!isGameActive || isRoundSolved) return; handleInput(btn.dataset.key); });
+    btn.addEventListener('click', (e) => { 
+        e.preventDefault(); 
+        if (!isGameActive || isRoundSolved) return; 
+        handleInput(btn.dataset.key); 
+    });
 });
+
 function handleInput(key) {
-    if (key === 'ENTER') { submitGuess(); return; }
+    if (key === 'ENTER') { 
+        submitGuess(); 
+        return; 
+    }
+    
     if (key === 'BACKSPACE') {
-        if (currentTile > 0) { currentTile--; currentGuess = currentGuess.slice(0, -1); const tile = document.getElementById(`tile-${currentRow}-${currentTile}`); tile.innerText = ''; tile.classList.remove('filled'); }
+        if (currentGuessArray[activeTileIndex] !== "") {
+            currentGuessArray[activeTileIndex] = "";
+        } else {
+            if (activeTileIndex > 0) {
+                activeTileIndex--;
+                currentGuessArray[activeTileIndex] = "";
+            }
+        }
+        updateGrid();
         return;
     }
-    if (currentTile < 5) { const tile = document.getElementById(`tile-${currentRow}-${currentTile}`); tile.innerText = key; tile.classList.add('filled'); currentGuess += key; currentTile++; }
+    
+    // Digitação
+    if (activeTileIndex < 5) {
+        currentGuessArray[activeTileIndex] = key;
+        
+        // Avança para o próximo slot vazio ou sequencial
+        let foundEmpty = false;
+        for (let i = activeTileIndex + 1; i < 5; i++) {
+            if (currentGuessArray[i] === "") {
+                activeTileIndex = i;
+                foundEmpty = true;
+                break;
+            }
+        }
+        
+        if (!foundEmpty && activeTileIndex < 4) {
+            activeTileIndex++;
+        }
+        updateGrid();
+    }
 }
+
 function submitGuess() {
-    if (currentGuess.length !== 5) { showMessage("Muito curta!", "#eab308"); setTimeout(() => { if(messageArea.innerText === "Muito curta!") { messageArea.innerText = ""; messageArea.style.opacity = "0"; } }, 1500); return; }
+    const currentGuess = currentGuessArray.join("");
+    
+    if (currentGuess.length !== 5) { 
+        showMessage("Muito curta!", "#eab308"); 
+        setTimeout(() => { if(messageArea.innerText === "Muito curta!") { messageArea.innerText = ""; messageArea.style.opacity = "0"; } }, 1500); 
+        return; 
+    }
+    
     if (!CLIENT_WORDS.includes(currentGuess)) {
         showMessage("Palavra inválida", "#e11d48");
         const row = document.querySelector(`#grid .grid-row:nth-child(${currentRow + 1})`);
@@ -932,11 +1056,24 @@ function submitGuess() {
         setTimeout(() => { if (messageArea.innerText === "Palavra inválida") { messageArea.innerText = ""; messageArea.style.opacity = "0"; } }, 1500);
         return;
     }
+    
+    // Limpa seleção visual antes de enviar
+    document.querySelectorAll('.tile.selected').forEach(t => t.classList.remove('selected'));
+    
     socket.emit('submitGuess', { roomId: currentRoomId, guess: currentGuess });
 }
+
 function paintRow(rowIdx, guess, result) {
-    for (let i = 0; i < 5; i++) { const tile = document.getElementById(`tile-${rowIdx}-${i}`); setTimeout(() => { tile.classList.add(result[i]); tile.style.animation = "pop 0.3s ease"; }, i * 150); }
+    for (let i = 0; i < 5; i++) { 
+        const tile = document.getElementById(`tile-${rowIdx}-${i}`); 
+        tile.classList.remove('selected'); // Garante remoção
+        setTimeout(() => { 
+            tile.classList.add(result[i]); 
+            tile.style.animation = "pop 0.3s ease"; 
+        }, i * 150); 
+    }
 }
+
 function updateKeyboard(guess, result) {
     for (let i = 0; i < 5; i++) {
         const letter = guess[i]; const status = result[i]; const btn = document.querySelector(`button[data-key="${letter}"]`);

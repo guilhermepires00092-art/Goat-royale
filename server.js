@@ -5,22 +5,27 @@ const path = require('path');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+    cors: { origin: "*" },
+    pingTimeout: 60000,
+});
 
-// Servir arquivos estáticos da pasta public
+// Servir arquivos estáticos
 app.use(express.static(path.join(__dirname, 'public')));
 
 // === CONFIGURAÇÕES DO JOGO ===
 const ROUND_TIME = 45; 
 const TOTAL_ROUNDS = 10;
+const MAX_ROOMS = 20; // Limite de salas
+const MAX_GLOBAL_PLAYERS = 1000; // Limite de conexões
 
 // ===========================================================================
 // ÁREA DE COLAGEM DA LISTA DE PALAVRAS (SERVER)
-// Cole a sua lista de palavras processada dentro dos colchetes abaixo.
-// Certifique-se de que as palavras estejam entre aspas e separadas por vírgula.
 // ===========================================================================
 const WORDS = [
     
+    // >>> COLE AQUI A SUA LISTA GIGANTE DE PALAVRAS <<<
+    // Exemplo: "TERMO", "NOBRE", "SUTIL" (Apague isso e cole a lista real)
     "ABACA", "ABATA", "ABATE", "ABATI", "ABEBE", "ABECE", "ABEDO", "ABETA", "ABETE", "ABETO",
     "ABEXI", "ABICO", "ABIDO", "ABIET", "ABIGA", "ABILA", "ABITA", "ABJEO", "ABOAR", "ABOAS",
     "ABOCA", "ABOFE", "ABOIO", "ABOIS", "ABOLE", "ABOLI", "ABONA", "ABONO", "ABOOI", "ABOOU",
@@ -629,7 +634,6 @@ const WORDS = [
     "ZONAL", "ZONAR", "ZONAS", "ZONZO", "ZOOMS", "ZOOSE", "ZORRA", "ZORRO", "ZUAVO", "ZUMBA",
     "ZUMBE", "ZUMBI", "ZUMBO", "ZUNDA", "ZUNGA", "ZUNGU", "ZUNHI", "ZUNIR", "ZUNIU", "ZUNJA",
     "ZUPAR", "ZURNA", "ZURRA", "ZURRE", "ZURRO", "ZURUO", "ZURZE", "MASSA", "MARTE", "MILTO", "PASSA", "PASSO", "PISCA"
-
 ];
 
 // Estado Global
@@ -639,7 +643,6 @@ function generateRoomId() {
     return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// Listagem de Salas Públicas
 function emitRoomList() {
     const availableRooms = Object.values(rooms)
         .filter(room => {
@@ -659,7 +662,6 @@ function emitRoomList() {
     io.emit('updateRoomList', availableRooms);
 }
 
-// Atualização de Jogadores na Sala
 function emitPlayerUpdates(roomId) {
     const room = rooms[roomId];
     if (!room) return;
@@ -670,11 +672,24 @@ function emitPlayerUpdates(roomId) {
 }
 
 io.on('connection', (socket) => {
-    console.log(`[Goat Royale] Conectado: ${socket.id}`);
+    // Proteção contra superlotação
+    const currentConnections = io.engine.clientsCount;
+    if (currentConnections > MAX_GLOBAL_PLAYERS) {
+        socket.emit('error', 'Servidor lotado! Tente novamente em instantes.');
+        socket.disconnect();
+        return;
+    }
+
+    console.log(`[Goat Royale] Conectado: ${socket.id} | Total: ${currentConnections}`);
     emitRoomList();
 
     // --- 1. CRIAR SALA ---
     socket.on('createRoom', ({ playerName, isPublic }) => {
+        if (Object.keys(rooms).length >= MAX_ROOMS) {
+            socket.emit('error', 'Limite de salas atingido! Entre em uma sala existente.');
+            return;
+        }
+
         const roomId = generateRoomId();
         rooms[roomId] = {
             id: roomId,
@@ -688,7 +703,7 @@ io.on('connection', (socket) => {
             solversCount: 0,
             isPublic: isPublic || false,
             maxPlayers: 10,
-            gameMode: 'default' // Padrão
+            gameMode: 'default'
         };
         joinRoomLogic(socket, roomId, playerName, true);
     });
@@ -730,7 +745,7 @@ io.on('connection', (socket) => {
         emitPlayerUpdates(roomId);
     }
 
-    // --- 3. CHAT (Com ID para Silenciar) ---
+    // --- 3. CHAT ---
     socket.on('chatMessage', ({ roomId, msg }) => {
         const room = rooms[roomId];
         if (room && room.players[socket.id]) {
@@ -743,32 +758,28 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- 4. INICIAR JOGO (Com Modo) ---
+    // --- 4. INICIAR JOGO ---
     socket.on('startGame', ({ roomId, gameMode }) => {
         const room = rooms[roomId];
         if (!room || room.host !== socket.id) return;
         
-        // Validação básica de dicionário
-        if (WORDS.length === 0) {
-            socket.emit('error', 'ERRO FATAL: Lista de palavras está vazia no servidor!');
-            return;
-        }
+        // Fallback se a lista estiver vazia (evita crash)
+        if (!WORDS || WORDS.length === 0) WORDS.push("TERMO");
 
         if (Object.keys(room.players).length < 2) {
              socket.emit('error', 'Mínimo de 2 jogadores necessários.');
              return; 
         }
 
-        // Define o modo
         room.gameMode = gameMode === 'competitive' ? 'competitive' : 'default';
         room.state = 'PLAYING';
         
         io.to(roomId).emit('gameStarted', { gameMode: room.gameMode });
-        emitRoomList(); 
+        emitRoomList(); // Remove da lista pública pois começou
         startRound(roomId);
     });
 
-    // --- 5. TENTATIVA (Lógica Híbrida) ---
+    // --- 5. TENTATIVA ---
     socket.on('submitGuess', ({ roomId, guess }) => {
         const room = rooms[roomId];
         if (!room || room.state !== 'PLAYING') return;
@@ -776,10 +787,9 @@ io.on('connection', (socket) => {
         const player = room.players[socket.id];
         if (player.solvedRound) return;
 
-        // Validação no servidor (segurança)
-        if (!WORDS.includes(guess)) return; 
+        // Validação se a palavra existe
+        if (WORDS.length > 0 && !WORDS.includes(guess)) return; 
 
-        // Incrementa tentativas
         player.roundAttempts++;
 
         const target = room.currentWord;
@@ -793,30 +803,24 @@ io.on('connection', (socket) => {
             player.wins++;
             room.solversCount++;
 
-            // === LÓGICA DE PONTUAÇÃO ===
             if (room.gameMode === 'competitive') {
-                // MODO COMPETITIVO (Speedrun)
+                // MODO COMPETITIVO
                 const points = Math.max(1, 11 - player.roundAttempts);
                 player.score += points;
-
                 io.to(roomId).emit('roundSuccess', `${player.name} VENCEU A RODADA! (+${points} pts)`);
                 emitPlayerUpdates(roomId);
-
-                // Encerra timer e round imediatamente
+                
                 clearInterval(room.timer);
                 io.to(roomId).emit('roundEnded', room.currentWord);
                 setTimeout(() => startRound(roomId), 5000);
                 return; 
-
             } else {
-                // MODO DEFAULT (Battle Royale)
+                // MODO BATTLE ROYALE
                 const points = Math.max(1, 11 - room.solversCount);
                 player.score += points;
-
                 socket.emit('roundSuccess', `+${points} PONTOS!`);
                 emitPlayerUpdates(roomId);
                 
-                // Se todos acertaram, acelera o timer
                 if (Object.values(room.players).every(p => p.solvedRound)) {
                     room.timeLeft = 2;
                 }
@@ -849,7 +853,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- DESCONEXÃO ---
     socket.on('disconnect', () => {
         for (const roomId in rooms) {
             const room = rooms[roomId];
@@ -883,68 +886,91 @@ function startRound(roomId) {
         return;
     }
 
-    // Seleciona palavra aleatória
     if (WORDS.length > 0) {
         room.currentRound++;
         room.currentWord = WORDS[Math.floor(Math.random() * WORDS.length)];
-        room.timeLeft = ROUND_TIME;
-        room.solversCount = 0;
-    
-        Object.values(room.players).forEach(p => {
-            p.solvedRound = false;
-            p.roundAttempts = 0;
-        });
-    
-        io.to(roomId).emit('newRound', {
-            roundNumber: room.currentRound,
-            totalRounds: TOTAL_ROUNDS,
-            gameMode: room.gameMode
-        });
-    
-        clearInterval(room.timer);
-        room.timer = setInterval(() => {
-            room.timeLeft--;
-            io.to(roomId).emit('timerUpdate', room.timeLeft);
-    
-            if (room.timeLeft <= 0) {
-                clearInterval(room.timer);
-                io.to(roomId).emit('roundEnded', room.currentWord);
-                setTimeout(() => startRound(roomId), 5000); 
-            }
-        }, 1000);
     } else {
-        console.error("ERRO: Lista de palavras vazia!");
+        room.currentRound++;
+        room.currentWord = "TERMO"; 
     }
+    
+    room.timeLeft = ROUND_TIME;
+    room.solversCount = 0;
+
+    Object.values(room.players).forEach(p => {
+        p.solvedRound = false;
+        p.roundAttempts = 0;
+    });
+
+    io.to(roomId).emit('newRound', {
+        roundNumber: room.currentRound,
+        totalRounds: TOTAL_ROUNDS,
+        gameMode: room.gameMode
+    });
+
+    clearInterval(room.timer);
+    room.timer = setInterval(() => {
+        room.timeLeft--;
+        io.to(roomId).emit('timerUpdate', room.timeLeft);
+
+        if (room.timeLeft <= 0) {
+            clearInterval(room.timer);
+            io.to(roomId).emit('roundEnded', room.currentWord);
+            setTimeout(() => startRound(roomId), 5000); 
+        }
+    }, 1000);
 }
 
 function endGame(roomId) {
     const room = rooms[roomId];
     if (!room) return;
-    room.state = 'ENDED';
+    
+    room.state = 'LOBBY';
+    room.currentRound = 0;
+    
     io.to(roomId).emit('gameOver', Object.values(room.players));
-    delete rooms[roomId];
+    
+    Object.values(room.players).forEach(p => {
+        p.score = 0;
+        p.wins = 0;
+        p.solvedRound = false;
+        p.roundAttempts = 0;
+    });
+
     emitRoomList();
+    io.to(roomId).emit('updatePlayerList', Object.values(room.players));
 }
 
+// Lógica de Cores com Frequência (Correção de letras repetidas)
 function calculateWordleResult(guess, target) {
     const res = Array(5).fill('absent');
-    const targetArr = target.split('');
     const guessArr = guess.split('');
+    const targetArr = target.split('');
+    const targetFreq = {};
 
-    guessArr.forEach((char, i) => {
-        if (char === targetArr[i]) {
+    // Mapa de frequência
+    for (const char of targetArr) {
+        targetFreq[char] = (targetFreq[char] || 0) + 1;
+    }
+
+    // 1. Verdes
+    for (let i = 0; i < 5; i++) {
+        if (guessArr[i] === targetArr[i]) {
             res[i] = 'correct';
-            targetArr[i] = null;
-            guessArr[i] = null;
+            targetFreq[guessArr[i]]--;
         }
-    });
+    }
 
-    guessArr.forEach((char, i) => {
-        if (char !== null && targetArr.includes(char)) {
-            res[i] = 'present';
-            targetArr[targetArr.indexOf(char)] = null;
+    // 2. Amarelos
+    for (let i = 0; i < 5; i++) {
+        const char = guessArr[i];
+        if (res[i] !== 'correct') {
+            if (targetFreq[char] > 0) {
+                res[i] = 'present';
+                targetFreq[char]--;
+            }
         }
-    });
+    }
 
     return res;
 }
