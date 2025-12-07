@@ -9,13 +9,11 @@
 </head>
 <body>
 
-    <!-- 1. TELA DE LOGIN (GOOGLE) -->
+    <!-- 1. TELA DE LOGIN -->
     <div id="login-screen" class="screen active">
         <div class="card login-card">
             <h1 class="logo">GOAT <span class="highlight">ROYALE</span></h1>
-            <!-- Texto removido conforme solicitado -->
             
-            <!-- Botão de Login Google Corrigido -->
             <a href="/auth/google" class="btn-google">
                 <img src="https://cdn-icons-png.flaticon.com/512/2991/2991148.png" alt="G" width="20">
                 Entrar com Google
@@ -23,7 +21,7 @@
         </div>
     </div>
 
-    <!-- 2. TELA DE DASHBOARD (MENU PRINCIPAL) -->
+    <!-- 2. DASHBOARD -->
     <div id="dashboard-screen" class="screen">
         <header class="dashboard-header">
             <div class="user-profile-mini">
@@ -33,7 +31,7 @@
                     <span class="energy-badge">⚡ <span id="user-energy">--</span></span>
                 </div>
             </div>
-            <a href="/auth/logout" class="btn-logout" title="Sair"><span class="material-icons">logout</span></a>
+            <a href="/auth/logout" class="btn-logout"><span class="material-icons">logout</span></a>
         </header>
 
         <div class="dashboard-content">
@@ -45,7 +43,6 @@
                 </div>
             </div>
 
-            <!-- LISTA DE SALAS PÚBLICAS -->
             <div class="room-browser card">
                 <h4>SALAS PÚBLICAS</h4>
                 <div id="room-list-items">
@@ -55,27 +52,39 @@
         </div>
     </div>
 
-    <!-- 3. TELA DE SETUP (CRIAR/ENTRAR) -->
+    <!-- 3. TELA DE SETUP (CRIAR/ENTRAR) - DESIGN NOVO -->
     <div id="lobby-setup-screen" class="screen">
-        <div class="card login-card">
-            <div style="width: 100%; display: flex; justify-content: flex-start; margin-bottom: 10px;">
-                <button class="btn-back" id="btn-back-dash" style="background:none; border:none; color:white; cursor:pointer;"><span class="material-icons">arrow_back</span> Voltar</button>
+        <div class="card login-card" style="max-width: 500px;">
+            <div style="width: 100%; text-align: left; margin-bottom: 10px;">
+                <button class="btn-back" id="btn-back-dash" style="background:none; border:none; color:#888; cursor:pointer; display:flex; align-items:center; gap:5px;">
+                    <span class="material-icons">arrow_back</span> Voltar
+                </button>
             </div>
-            <h2>Nova Partida</h2>
             
-            <div class="actions">
-                <label class="toggle-control">
-                    <input type="checkbox" id="public-room-check">
-                    <span class="control-label">Criar Sala Pública</span>
-                </label>
+            <h2 style="margin-bottom: 20px;">NOVA PARTIDA</h2>
+            
+            <div class="setup-container">
+                <!-- Caixa de Criação -->
+                <div class="setup-box">
+                    <div class="setup-title">CRIAR SALA</div>
+                    <div class="setup-row">
+                        <!-- Toggle Switch Moderno -->
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="public-room-check">
+                            <span class="slider"></span>
+                            <span class="toggle-label">Pública</span>
+                        </label>
+                        <button id="btn-create-room" class="btn-primary" style="padding: 8px 20px; font-size: 0.9rem;">CRIAR</button>
+                    </div>
+                </div>
 
-                <button id="btn-create-room" class="btn-primary">CRIAR SALA</button>
-                
-                <div class="divider">OU CÓDIGO</div>
-                
-                <div class="join-row">
-                    <input type="number" id="room-code-input" placeholder="000000">
-                    <button id="btn-join-room" class="btn-secondary">ENTRAR</button>
+                <!-- Caixa de Entrada -->
+                <div class="setup-box">
+                    <div class="setup-title">ENTRAR COM CÓDIGO</div>
+                    <div class="join-row">
+                        <input type="number" id="room-code-input" placeholder="000000" style="text-align: center; letter-spacing: 2px;">
+                        <button id="btn-join-room" class="btn-secondary" style="width: auto;">GO</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -83,101 +92,115 @@
 
     <!-- 4. TELA DE LOBBY (AGUARDANDO) -->
     <div id="lobby-screen" class="screen">
-        <div class="card lobby-card">
-            <h2>SALA: <span id="lobby-code" class="highlight">...</span></h2>
-            <div class="list-container">
-                <h3>Jogadores:</h3>
-                <ul id="player-list-lobby" class="styled-list"></ul>
-            </div>
-            <p id="waiting-msg" class="pulse">Aguardando o anfitrião...</p>
+        <div class="card lobby-card" style="max-width: 600px;">
             
-            <!-- Controles do Host -->
-            <div id="host-controls" style="display: none; margin-top: 15px; width: 100%;">
-                <div class="mode-selector">
-                    <h4>Modo de Jogo:</h4>
-                    <label><input type="radio" name="game-mode" value="default" checked> <span>⚔️ Battle Royale</span></label>
-                    <label><input type="radio" name="game-mode" value="competitive"> <span>🏆 Competitivo</span></label>
-                </div>
-                <button id="btn-start-game" class="btn-primary">INICIAR PARTIDA</button>
+            <!-- Header do Lobby com Botão Voltar -->
+            <div class="lobby-header-actions">
+                <button id="btn-leave-lobby" style="background:none; border:none; color:#e11d48; cursor:pointer; display:flex; align-items:center; gap:5px; font-weight:bold;">
+                    <span class="material-icons">arrow_back</span> SAIR
+                </button>
+                <span style="color:#666; font-size:0.8rem;">AGUARDANDO</span>
             </div>
+
+            <h3 style="color: #888; font-size: 0.8rem; margin-top: 10px;">CÓDIGO DA SALA</h3>
+            <div class="lobby-code-display" id="lobby-code" onclick="navigator.clipboard.writeText(this.innerText); alert('Copiado!')">...</div>
+
+            <!-- Grid de Jogadores -->
+            <div class="list-container">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <h3>JOGADORES</h3>
+                    <span id="player-count-badge" style="background:#333; padding:2px 6px; border-radius:4px; font-size:0.8rem">0/10</span>
+                </div>
+                <div id="player-list-lobby" class="player-grid"></div>
+            </div>
+
+            <!-- Controles do Host (NOVO DESIGN) -->
+            <div id="host-controls" style="display: none; margin-top: 15px; width: 100%; border-top: 1px solid #333; padding-top: 15px;">
+                <p style="margin-bottom: 10px; font-size: 0.9rem; color: #ccc;">SELECIONE O MODO:</p>
+                <div class="mode-selection-container">
+                    <label class="mode-option">
+                        <input type="radio" name="game-mode" value="default" checked>
+                        <div class="mode-card-visual">
+                            <span class="icon">⚔️</span>
+                            <span class="label">Battle Royale</span>
+                        </div>
+                    </label>
+                    <label class="mode-option">
+                        <input type="radio" name="game-mode" value="competitive">
+                        <div class="mode-card-visual">
+                            <span class="icon">🏆</span>
+                            <span class="label">Speedrun</span>
+                        </div>
+                    </label>
+                </div>
+                <button id="btn-start-game" class="btn-primary btn-start-pulse">INICIAR PARTIDA</button>
+            </div>
+            
+            <p id="waiting-msg" class="pulse" style="margin-top: 20px;">O anfitrião está configurando a partida...</p>
+
+            <!-- CHAT DO LOBBY -->
+            <div class="lobby-chat-wrapper">
+                <div id="lobby-chat-messages" class="lobby-chat-messages">
+                    <div style="color:var(--accent-red); font-style:italic; padding: 5px;">Chat da Sala...</div>
+                </div>
+                <div class="lobby-chat-input-box">
+                    <input type="text" id="lobby-chat-input" placeholder="Digite aqui..." style="margin:0; font-size:0.9rem; padding:8px;">
+                    <button id="btn-send-lobby-chat" class="btn-primary" style="width: 40px; padding: 0;"><span class="material-icons">send</span></button>
+                </div>
+            </div>
+
         </div>
     </div>
 
     <!-- 5. TELA DE JOGO -->
     <div id="game-screen" class="screen game-layout">
-        
-        <!-- COLUNA 1: PLACAR -->
         <aside id="scoreboard-container">
-            <div class="panel-header">
-                <span class="material-icons">leaderboard</span> RANK
-            </div>
+            <div class="panel-header"><span class="material-icons">leaderboard</span> RANK</div>
             <ul id="live-score-list" class="styled-list score-list"></ul>
         </aside>
-
-        <!-- COLUNA 2: ÁREA PRINCIPAL -->
+        
         <main id="main-game-area">
-            
-            <!-- HEADER -->
             <header id="game-header">
                 <div class="badge">ROUND <strong id="round-display">1/10</strong></div>
                 <div class="badge timer-badge"><span class="material-icons">timer</span> <strong id="timer">45</strong></div>
-                <button id="btn-leave-match" class="btn-icon-danger" title="Sair">
-                    <span class="material-icons">logout</span>
-                </button>
+                <button id="btn-leave-match" class="btn-icon-danger" title="Sair"><span class="material-icons">logout</span></button>
             </header>
-
-            <!-- MENSAGEM FLUTUANTE (ABSOLUTA) -->
+            
             <div id="message-area"></div>
-
-            <!-- ÁREA DO TABULEIRO -->
+            
             <div id="game-stage">
-                <div id="grid-container">
-                    <div id="grid">
-                        <!-- Tiles gerados via JS -->
-                    </div>
-                </div>
-
-                <!-- TECLADO VIRTUAL -->
+                <div id="grid-container"><div id="grid"></div></div>
                 <div id="keyboard"></div>
             </div>
-
-            <!-- WRAPPER DE CHAT (POSICIONAMENTO FIXO NO MOBILE) -->
+            
             <div id="chat-and-controls-wrapper">
                 <div class="chat-controls-bar">
-                    <button id="btn-toggle-chat" class="btn-icon-small" title="Chat">
-                        <span class="material-icons">chat</span>
-                    </button>
+                    <button id="btn-toggle-chat" class="btn-icon-small"><span class="material-icons">chat</span></button>
                 </div>
                 <div id="chat-container">
-                    <div id="chat-messages">
-                        <div class="chat-sys-msg">Bem-vindo ao Chat!</div>
-                    </div>
+                    <div id="chat-messages"><div class="chat-sys-msg">Bem-vindo ao Chat!</div></div>
                     <div id="chat-input-wrapper">
-                        <input type="text" id="chat-input" placeholder="Converse aqui..." disabled>
+                        <input type="text" id="chat-input" placeholder="..." disabled>
                         <button id="btn-send-chat" disabled><span class="material-icons">send</span></button>
                     </div>
                 </div>
             </div>
-
         </main>
     </div>
 
-    <!-- MODAIS (OVERLAYS) -->
-    
-    <!-- Perfil -->
+    <!-- MODAIS -->
     <div id="profile-modal" class="hidden modal-overlay">
         <div class="card modal-card">
             <button class="close-modal" onclick="closeModals()">×</button>
             <h3>SEU PERFIL</h3>
             <div class="profile-stats">
-                <div class="stat-item"><strong>Pontos Totais:</strong> <span id="p-score">0</span></div>
+                <div class="stat-item"><strong>Pontos:</strong> <span id="p-score">0</span></div>
                 <div class="stat-item"><strong>Vitórias:</strong> <span id="p-wins">0</span></div>
-                <div class="stat-item"><strong>Partidas:</strong> <span id="p-games">0</span></div>
+                <div class="stat-item"><strong>Jogos:</strong> <span id="p-games">0</span></div>
             </div>
         </div>
     </div>
 
-    <!-- Ranking Global -->
     <div id="leaderboard-modal" class="hidden modal-overlay">
         <div class="card modal-card wide">
             <button class="close-modal" onclick="closeModals()">×</button>
@@ -186,24 +209,22 @@
         </div>
     </div>
 
-    <!-- Confirmar Saída -->
     <div id="confirm-leave-overlay" class="hidden modal-overlay">
         <div class="card modal-card">
-            <h3>SAIR DA PARTIDA?</h3>
-            <p>Você perderá <strong>1 Energia</strong> se sair agora.</p>
+            <h3>Sair?</h3>
+            <p>Você perderá 1 energia.</p>
             <div class="modal-actions">
-                <button id="btn-cancel-leave" class="btn-secondary">CANCELAR</button>
-                <button id="btn-confirm-leave" class="btn-primary">SAIR</button>
+                <button id="btn-cancel-leave" class="btn-secondary">Cancelar</button>
+                <button id="btn-confirm-leave" class="btn-primary">Sair</button>
             </div>
         </div>
     </div>
 
-    <!-- Game Over -->
     <div id="game-over-overlay" class="hidden modal-overlay">
         <div class="card results-card">
             <h2 id="game-over-title">FIM DE JOGO</h2>
             <div id="final-results"></div>
-            <button id="btn-restart" class="btn-primary">VOLTAR AO MENU</button>
+            <button id="btn-restart" class="btn-primary">MENU</button>
         </div>
     </div>
 
