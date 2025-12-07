@@ -17,8 +17,7 @@
 body {
     background-color: var(--bg-dark);
     color: var(--text-white);
-    /* CORREÇÃO: 100svh para mobile browsers */
-    height: 100svh;
+    height: 100svh; /* Altura corrigida para mobile */
     width: 100vw;
     overflow: hidden;
     display: flex;
@@ -26,19 +25,24 @@ body {
     margin: 0;
 }
 
-/* === TELAS === */
+/* === GERENCIAMENTO DE TELAS === */
 .screen { display: none; width: 100%; height: 100%; }
 .screen.active { display: flex; flex-direction: column; }
 
-/* === LOGIN E LOBBY GERAL === */
+/* === LOGIN, DASHBOARD E SETUP === */
 #login-screen, #lobby-screen, #lobby-setup-screen {
     align-items: center; justify-content: center;
     background: radial-gradient(circle, #2c2c2e 0%, #000 100%);
+    padding: 20px;
 }
+
 .card {
     background: var(--bg-panel); padding: 2rem; border-radius: 12px;
-    border: 1px solid #333; width: 90%; max-width: 400px; text-align: center;
+    border: 1px solid #333; width: 100%; max-width: 450px; text-align: center;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+    display: flex; flex-direction: column;
 }
+
 .logo { font-size: 2.2rem; margin-bottom: 1rem; letter-spacing: -1px; }
 .highlight { color: var(--accent-red); }
 
@@ -51,9 +55,85 @@ body {
 }
 .btn-google:active { transform: scale(0.98); }
 
+/* --- NOVO DESIGN: TELA DE SETUP --- */
+.setup-container {
+    display: flex; flex-direction: column; gap: 15px; width: 100%;
+}
+.setup-box {
+    background: rgba(0, 0, 0, 0.3); border: 1px solid #333;
+    padding: 15px; border-radius: 8px; transition: border-color 0.3s;
+}
+.setup-box:hover { border-color: #555; }
+.setup-title {
+    font-size: 0.8rem; color: #888; text-transform: uppercase;
+    margin-bottom: 10px; letter-spacing: 1px; text-align: left;
+}
+
+/* --- NOVO DESIGN: LISTA DE SALAS (CARDS) --- */
+#room-list-items {
+    display: flex; flex-direction: column; gap: 8px;
+    max-height: 200px; overflow-y: auto; padding-right: 5px;
+}
+.room-item {
+    background: linear-gradient(90deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0) 100%);
+    border-left: 3px solid var(--accent-red); padding: 12px; border-radius: 4px;
+    display: flex; justify-content: space-between; align-items: center;
+    cursor: pointer; transition: all 0.2s;
+}
+.room-item:hover {
+    background: linear-gradient(90deg, rgba(225, 29, 72, 0.2) 0%, rgba(0,0,0,0) 100%);
+    padding-left: 15px;
+}
+.room-info { text-align: left; }
+.room-info strong { color: white; display: block; font-size: 0.95rem; }
+.room-info span { color: #888; font-size: 0.8rem; }
+.room-badge { 
+    background: #333; color: #ccc; padding: 2px 6px; 
+    border-radius: 3px; font-size: 0.7rem; margin-left: 5px; vertical-align: middle;
+}
+
+/* --- NOVO DESIGN: LOBBY DE ESPERA --- */
+.lobby-code-display {
+    background: #000; border: 1px dashed var(--accent-red); padding: 15px;
+    border-radius: 8px; margin: 10px 0 20px 0; font-family: monospace;
+    font-size: 2.2rem; color: var(--accent-red); letter-spacing: 5px;
+    cursor: pointer; transition: background 0.2s;
+}
+.lobby-code-display:active { background: #111; transform: scale(0.98); }
+
+.list-container { width: 100%; text-align: left; }
+.list-container h3 { font-size: 0.9rem; color: #888; margin-bottom: 10px; }
+
+/* Grid de Jogadores (Cartões) */
+.player-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 10px; width: 100%; margin: 10px 0;
+    max-height: 300px; overflow-y: auto;
+}
+.player-card {
+    background: var(--bg-input); border: 1px solid #333; border-radius: 8px;
+    padding: 10px; display: flex; flex-direction: column; align-items: center;
+    gap: 5px; position: relative; animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.player-card img { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #555; }
+.player-card.is-host img { border-color: var(--color-present); }
+.player-card span { font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.host-badge {
+    font-size: 0.6rem; background: var(--color-present); color: black;
+    padding: 1px 4px; border-radius: 3px; font-weight: bold;
+    margin-top: -12px; z-index: 1;
+}
+
+@keyframes popIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+.btn-start-pulse { animation: pulse-glow 2s infinite; }
+@keyframes pulse-glow {
+    0% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.4); }
+    70% { box-shadow: 0 0 0 10px rgba(225, 29, 72, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0); }
+}
+
 /* === DASHBOARD === */
 #dashboard-screen { background-color: var(--bg-dark); }
-
 .dashboard-header {
     display: flex; justify-content: space-between; align-items: center;
     width: 100%; padding: 15px; background: var(--bg-panel);
@@ -65,7 +145,6 @@ body {
 .user-info-text h3 { margin: 0; font-size: 1rem; }
 .energy-badge { color: #eab308; font-weight: bold; font-size: 0.9rem; }
 .btn-logout { color: #888; text-decoration: none; }
-
 .dashboard-content {
     flex: 1; overflow-y: auto; width: 100%; max-width: 600px; margin: 0 auto;
     padding: 20px; display: flex; flex-direction: column; gap: 20px;
@@ -74,22 +153,10 @@ body {
 .large { font-size: 1.2rem; padding: 15px; }
 .row-btns { display: flex; gap: 10px; }
 .row-btns button { flex: 1; }
-
-/* Room List no Dashboard */
-.room-browser { width: 100%; padding: 15px; text-align: left; max-width: 100%; flex: 1; display: flex; flex-direction: column; }
+.room-browser { width: 100%; padding: 15px; text-align: left; flex: 1; display: flex; flex-direction: column; }
 .room-browser h4 { color: var(--text-white); margin-bottom: 10px; opacity: 0.7; font-size: 0.9rem; }
-#room-list-items { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 8px; }
 
-.room-item {
-    background: rgba(255,255,255,0.05); border-radius: 6px; padding: 10px;
-    display: flex; justify-content: space-between; align-items: center;
-}
-.btn-join-room {
-    background: var(--accent-red); border: none; color: white; padding: 5px 10px;
-    border-radius: 4px; font-size: 0.8rem; font-weight: bold; cursor: pointer;
-}
-
-/* === SETUP & LOBBY ELEMENTS === */
+/* === COMPONENTES BÁSICOS === */
 input {
     width: 100%; padding: 12px; background: var(--bg-input);
     border: 1px solid #333; border-radius: 6px; color: white;
@@ -100,34 +167,34 @@ input:focus { border-color: var(--accent-red); }
 .btn-primary {
     width: 100%; padding: 12px; background: var(--accent-red);
     color: white; border: none; border-radius: 6px; font-weight: bold;
-    cursor: pointer; text-transform: uppercase;
+    cursor: pointer; text-transform: uppercase; transition: background 0.2s;
 }
+.btn-primary:hover { background: var(--accent-hover); }
+
 .btn-secondary {
     background: transparent; border: 1px solid #555; color: #ccc;
     padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%;
 }
-.divider { margin: 15px 0; font-size: 0.8rem; color: #666; }
+.divider { margin: 15px 0; font-size: 0.8rem; color: #666; font-weight: bold; text-transform: uppercase;}
 .join-row { display: flex; gap: 10px; }
 
 /* Toggle Switch */
 .toggle-control {
     display: flex; align-items: center; justify-content: space-between;
     background-color: var(--bg-input); padding: 10px 15px; border-radius: 8px;
-    border: 1px solid #333; margin-bottom: 15px; cursor: pointer;
+    border: 1px solid #333; margin-bottom: 0; cursor: pointer;
 }
-.control-label { font-size: 0.95rem; color: #ccc; }
+.control-label { font-size: 0.9rem; color: #ccc; }
 .toggle-control input { width: auto; margin: 0; }
 
 /* Mode Selector */
 .mode-selector { margin-bottom: 15px; background: rgba(255,255,255,0.05); padding: 10px; border-radius: 8px; text-align: left; }
-.mode-selector h4 { margin-bottom: 10px; font-size: 0.9rem; }
-.mode-selector label { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; cursor: pointer; }
+.mode-selector h4 { margin-bottom: 10px; font-size: 0.9rem; color: var(--text-white); }
+.mode-selector label { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; cursor: pointer; color: #ccc; font-size: 0.9rem;}
 .mode-selector input { width: auto; margin: 0; }
 
 /* === GAME LAYOUT === */
 .game-layout { flex-direction: row; }
-
-/* Placar */
 #scoreboard-container {
     width: 25%; min-width: 220px; background: var(--bg-panel);
     border-right: 1px solid #333; display: flex; flex-direction: column;
@@ -141,15 +208,10 @@ input:focus { border-color: var(--accent-red); }
     padding: 10px; background: rgba(255,255,255,0.05); margin-bottom: 5px;
     border-radius: 4px; display: flex; justify-content: space-between;
 }
-
-/* Área Principal */
 #main-game-area {
     width: 75%; flex-grow: 1; display: flex; flex-direction: column; 
-    position: relative; /* Importante para o chat absoluto */
-    padding-bottom: 180px; /* Espaço para chat no Desktop */
+    position: relative; padding-bottom: 180px; 
 }
-
-/* Header Jogo */
 #game-header {
     height: 50px; display: flex; justify-content: center; align-items: center;
     gap: 20px; border-bottom: 1px solid #333; background: rgba(0,0,0,0.2);
@@ -179,13 +241,11 @@ input:focus { border-color: var(--accent-red); }
     pointer-events: none; opacity: 0; transition: opacity 0.3s;
 }
 
-/* Área do Grid */
+/* Grid & Teclado */
 #game-stage {
     flex: 1; display: flex; flex-direction: column; align-items: center;
     justify-content: center; overflow-y: auto; padding: 10px; padding-bottom: 0;
 }
-
-/* Grid & Teclado */
 #grid { display: grid; grid-template-rows: repeat(6, 1fr); gap: 5px; width: 280px; aspect-ratio: 5/6; margin-bottom: 10px; flex-shrink: 0;}
 .grid-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
 .tile {
@@ -196,7 +256,6 @@ input:focus { border-color: var(--accent-red); }
 .tile.correct { background: var(--color-correct); border: none; }
 .tile.present { background: var(--color-present); border: none; }
 .tile.absent { background: var(--color-absent); border: none; }
-
 #keyboard { width: 100%; max-width: 500px; flex-shrink: 0; margin-bottom: 5px; }
 .row { display: flex; width: 100%; gap: 5px; margin-bottom: 5px; justify-content: center; }
 #keyboard button {
@@ -214,7 +273,6 @@ input:focus { border-color: var(--accent-red); }
     background-color: var(--bg-panel); border-top: 1px solid #333;
     display: flex; flex-direction: column;
 }
-
 .chat-controls-bar {
     width: 100%; height: 30px; display: flex; align-items: center; justify-content: flex-end;
     padding: 0 10px; background: rgba(0,0,0,0.2); border-bottom: 1px solid #333;
@@ -233,7 +291,6 @@ input:focus { border-color: var(--accent-red); }
 .chat-sys-msg { color: var(--accent-red); font-style: italic; }
 .chat-usr-msg { margin-bottom: 2px; line-height: 1.3; }
 .chat-name { font-weight: bold; color: var(--color-present); }
-
 #chat-input-wrapper { display: flex; gap: 5px; height: 35px; }
 #chat-input { margin: 0; padding: 5px 10px; font-size: 0.9rem; background: rgba(0,0,0,0.3); }
 #btn-send-chat { width: 40px; background: var(--accent-red); border: none; border-radius: 6px; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;}
@@ -245,10 +302,10 @@ input:focus { border-color: var(--accent-red); }
     display: none; align-items: center; justify-content: center;
 }
 .modal-overlay:not(.hidden) { display: flex !important; }
-
 .modal-card {
     border: 1px solid var(--accent-red); box-shadow: 0 0 20px rgba(225, 29, 72, 0.2);
     width: 90%; max-width: 350px; padding: 25px; text-align: center; position: relative;
+    background: var(--bg-panel); border-radius: 12px;
 }
 .close-modal {
     position: absolute; top: 10px; right: 10px; background: none; border: none; color: white; font-size: 1.5rem; cursor: pointer;
@@ -262,7 +319,6 @@ input:focus { border-color: var(--accent-red); }
 @media (max-width: 768px) {
     .game-layout { flex-direction: column; }
     
-    /* Placar Fino Horizontal */
     #scoreboard-container { 
         width: 100%; height: 50px; border-right: none; border-bottom: 1px solid #333;
         display: flex; flex-direction: row; align-items: center;
@@ -271,20 +327,14 @@ input:focus { border-color: var(--accent-red); }
     #scoreboard-container .styled-list { display: flex; flex-direction: row; padding: 5px; gap: 10px; }
     #scoreboard-container li { padding: 2px 8px; white-space: nowrap; background: rgba(255,255,255,0.1); }
 
-    /* Área Principal */
     #main-game-area { width: 100%; height: calc(100svh - 50px); padding-bottom: 0; }
-    
-    /* Conteúdo (com padding para não esconder atrás do chat) */
     #game-stage { padding-bottom: 110px; }
-
     #grid { width: 260px; margin-bottom: 2px; } 
     .tile { font-size: 1.5rem; }
     #keyboard { margin-bottom: 0; }
 
-    /* Chat Fixo */
     #chat-and-controls-wrapper { position: fixed; bottom: 0; z-index: 2000; }
-    #chat-container { height: 70px; } /* 70px chat + 30px barra = 100px total */
+    #chat-container { height: 70px; }
     #chat-input-wrapper { height: 30px; }
 }
-
 @keyframes pop { 50% { transform: scale(1.1); } }

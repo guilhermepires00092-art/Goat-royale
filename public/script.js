@@ -1,13 +1,14 @@
 const socket = io();
 
-// LISTA DE TESTE (IGUAL AO SERVER)
+// ===========================================
+// COLE SUA LISTA CLIENT_WORDS AQUI
+// ===========================================
 const CLIENT_WORDS = [
-    "TERMO", "NOBRE", "SUTIL", "VIGOR", "SANTO", 
-    "IDEAL", "SONHO", "AMIGO", "MUTUA", "EXITO", 
-    "TEMPO", "ALGOZ", "GENRO", "SENSO", "CORAG"
+    // ... SUAS PALAVRAS AQUI ...
+    "ABATA", "ABOCA"
 ];
 
-// Elementos DOM
+// Elementos
 const screens = {
     login: document.getElementById('login-screen'),
     dashboard: document.getElementById('dashboard-screen'),
@@ -16,18 +17,7 @@ const screens = {
     game: document.getElementById('game-screen')
 };
 
-// Estado
-let currentRoomId = null;
-let currentRow = 0;
-let currentTile = 0;
-let currentGuess = "";
-let isGameActive = false;
-let isRoundSolved = false;
-let myPlayerId = null;
-let silencedPlayers = new Set();
-let isChatVisible = true;
-
-// === LOGIN CHECK ===
+// --- INICIALIZAÇÃO E LOGIN ---
 fetch('/api/me')
     .then(res => {
         if (res.ok) return res.json();
@@ -45,10 +35,16 @@ function updateUserDisplay(user) {
     document.getElementById('user-energy').innerText = user.energy;
 }
 
-// === DASHBOARD ===
+// --- NAVEGAÇÃO DE TELAS ---
 document.getElementById('btn-play-now').addEventListener('click', () => switchScreen('setup'));
 document.getElementById('btn-back-dash').addEventListener('click', () => switchScreen('dashboard'));
 
+function switchScreen(name) {
+    Object.values(screens).forEach(s => s.classList.remove('active'));
+    if(screens[name]) screens[name].classList.add('active');
+}
+
+// --- PERFIL E RANKING ---
 document.getElementById('btn-view-profile').addEventListener('click', () => {
     fetch('/api/me').then(r=>r.json()).then(user => {
         document.getElementById('p-score').innerText = user.score;
@@ -72,7 +68,7 @@ document.getElementById('btn-view-leaderboard').addEventListener('click', () => 
 
 window.closeModals = () => document.querySelectorAll('.modal-overlay').forEach(el => el.classList.add('hidden'));
 
-// === LOBBY SETUP ===
+// --- CRIAÇÃO E ENTRADA EM SALAS ---
 document.getElementById('btn-create-room').addEventListener('click', () => {
     const isPublic = document.getElementById('public-room-check').checked;
     socket.emit('createRoom', { isPublic });
@@ -83,84 +79,100 @@ document.getElementById('btn-join-room').addEventListener('click', () => {
     if(code) socket.emit('joinRoom', { roomId: code });
 });
 
-// === GAME LOGIC ===
-document.getElementById('btn-start-game').addEventListener('click', () => {
-    const mode = document.querySelector('input[name="game-mode"]:checked').value;
-    socket.emit('startGame', { roomId: currentRoomId, gameMode: mode });
-});
-
-// Chat
-const chatContainer = document.getElementById('chat-container');
-const chatInput = document.getElementById('chat-input');
-const chatToggleBtn = document.getElementById('btn-toggle-chat');
-
-chatToggleBtn.addEventListener('click', () => {
-    isChatVisible = !isChatVisible;
-    if(isChatVisible) {
-        chatContainer.style.display = 'flex';
-        chatToggleBtn.innerHTML = '<span class="material-icons">chat</span>';
-        chatToggleBtn.style.opacity = '1';
-    } else {
-        chatContainer.style.display = 'none';
-        chatToggleBtn.innerHTML = '<span class="material-icons">chat_bubble_outline</span>';
-        chatToggleBtn.style.opacity = '0.5';
-    }
-});
-
-window.toggleMute = function(playerId, btnElement) {
-    if (playerId === myPlayerId) return;
-    if (silencedPlayers.has(playerId)) {
-        silencedPlayers.delete(playerId);
-        btnElement.innerText = 'volume_up';
-        btnElement.style.color = '#888';
-    } else {
-        silencedPlayers.add(playerId);
-        btnElement.innerText = 'volume_off';
-        btnElement.style.color = '#e11d48';
-    }
-};
-
-function sendChatMessage() {
-    const msg = chatInput.value.trim();
-    if (!msg) return;
-    socket.emit('chatMessage', { roomId: currentRoomId, msg: msg });
-    chatInput.value = "";
-    chatInput.focus();
-}
-document.getElementById('btn-send-chat').addEventListener('click', sendChatMessage);
-chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
-
-// === SOCKET LISTENERS ===
-socket.on('userDataUpdate', (user) => updateUserDisplay(user));
-
+// Renderização da Lista de Salas (Estilo Card)
 socket.on('updateRoomList', (rooms) => {
     const container = document.getElementById('room-list-items');
     if (!container) return;
     container.innerHTML = '';
-    if (rooms.length === 0) return container.innerHTML = '<p style="text-align:center; color:#666">Nenhuma sala encontrada.</p>';
+    
+    if (rooms.length === 0) {
+        return container.innerHTML = '<p style="text-align:center; color:#666; padding:10px;">Nenhuma sala pública encontrada.</p>';
+    }
     
     rooms.forEach(r => {
         const el = document.createElement('div');
         el.className = 'room-item';
-        el.innerHTML = `<div class="room-info"><strong>${r.hostName}</strong> <span>${r.playerCount}/10</span></div><button class="btn-join-room">ENTRAR</button>`;
-        el.onclick = () => socket.emit('joinRoom', { roomId: r.id });
+        const modeBadge = r.gameMode === 'competitive' ? '🏆' : '⚔️';
+        
+        el.innerHTML = `
+            <div class="room-info">
+                <strong>${r.hostName}'s Room <span class="room-badge">${modeBadge}</span></strong>
+                <span>${r.playerCount} / 10 Jogadores</span>
+            </div>
+            <div class="material-icons" style="color: #666;">arrow_forward_ios</div>
+        `;
+        
+        el.onclick = () => {
+            // Efeito visual
+            el.style.transform = "scale(0.98)";
+            setTimeout(() => el.style.transform = "scale(1)", 100);
+            document.getElementById('room-code-input').value = r.id;
+            socket.emit('joinRoom', { roomId: r.id });
+        };
         container.appendChild(el);
     });
 });
 
+// --- LÓGICA DO LOBBY ---
 socket.on('roomJoined', (data) => {
     currentRoomId = data.roomId;
     myPlayerId = data.playerId;
     switchScreen('lobby');
     document.getElementById('lobby-code').innerText = data.roomId;
+    
+    const hostControls = document.getElementById('host-controls');
+    const waitingMsg = document.getElementById('waiting-msg');
+    
     if(data.isHost) {
-        document.getElementById('host-controls').style.display = 'block';
-        document.getElementById('waiting-msg').style.display = 'none';
+        hostControls.style.display = 'block';
+        waitingMsg.style.display = 'none';
     } else {
-        document.getElementById('host-controls').style.display = 'none';
-        document.getElementById('waiting-msg').style.display = 'block';
+        hostControls.style.display = 'none';
+        waitingMsg.style.display = 'block';
     }
 });
+
+// Renderização dos Jogadores no Lobby (GRID)
+socket.on('updatePlayerList', (players) => {
+    // 1. Lobby Grid
+    const lobbyList = document.getElementById('player-list-lobby');
+    const countBadge = document.getElementById('player-count-badge');
+    
+    if (lobbyList) {
+        // Atualiza contador se ele existir no HTML (adicionei no HTML acima)
+        if (document.querySelector('.list-container h3')) {
+             document.querySelector('.list-container h3').innerText = `JOGADORES (${players.length}/10)`;
+        }
+
+        lobbyList.innerHTML = players.map(p => {
+            const hostBadge = p.isHost ? '<div class="host-badge">HOST</div>' : '';
+            const avatarUrl = p.avatar || 'https://cdn-icons-png.flaticon.com/512/847/847969.png'; 
+            return `
+            <div class="player-card ${p.isHost ? 'is-host' : ''}">
+                <img src="${avatarUrl}" alt="Avatar">
+                ${hostBadge}
+                <span>${p.name}</span>
+            </div>
+            `;
+        }).join('');
+    }
+    // 2. Game Scoreboard
+    updateGameScoreboard(players);
+});
+
+document.getElementById('btn-start-game').addEventListener('click', () => {
+    const mode = document.querySelector('input[name="game-mode"]:checked').value;
+    socket.emit('startGame', { roomId: currentRoomId, gameMode: mode });
+});
+
+// --- LÓGICA DO JOGO ---
+let currentRoomId = null;
+let currentRow = 0;
+let currentTile = 0;
+let currentGuess = "";
+let isGameActive = false;
+let isRoundSolved = false;
+let myPlayerId = null;
 
 socket.on('gameStarted', () => {
     switchScreen('game');
@@ -169,26 +181,13 @@ socket.on('gameStarted', () => {
     document.getElementById('btn-send-chat').disabled = false;
 });
 
-socket.on('chatMessage', (data) => {
-    if (silencedPlayers.has(data.playerId)) return;
-    const chatBox = document.getElementById('chat-messages');
-    const div = document.createElement('div');
-    div.className = 'chat-usr-msg';
-    let muteControl = data.playerId !== myPlayerId ? `<span class="material-icons mute-btn" onclick="toggleMute('${data.playerId}', this)">volume_up</span>` : '';
-    div.innerHTML = `${muteControl} <span class="chat-name">${data.playerName}:</span> ${data.msg}`;
-    chatBox.appendChild(div);
-    chatBox.scrollTop = chatBox.scrollHeight;
-});
-
 socket.on('newRound', (data) => {
     resetRoundUI(data.roundNumber, data.totalRounds);
     isGameActive = true;
     isRoundSolved = false;
 });
 
-socket.on('timerUpdate', (time) => {
-    document.getElementById('timer').innerText = time;
-});
+socket.on('timerUpdate', (time) => document.getElementById('timer').innerText = time);
 
 socket.on('guessResult', ({ guess, result }) => {
     paintRow(currentRow, guess, result);
@@ -212,29 +211,71 @@ socket.on('roundEnded', (word) => { isGameActive = false; if(!isRoundSolved) sho
 socket.on('gameOver', (players) => {
     const overlay = document.getElementById('game-over-overlay');
     const list = document.getElementById('final-results');
+    const title = document.getElementById('game-over-title');
     players.sort((a,b) => b.score - a.score);
+    
+    if(title) title.innerHTML = `<span style="color:#eab308">${players[0].name}</span> É O GOAT 🐐`;
+
     list.innerHTML = players.map((p,i) => `<div style="margin:10px; font-size:1.2rem">${i===0?'👑':`#${i+1}`} <strong>${p.name}</strong>: ${p.score} pts</div>`).join('');
     overlay.classList.remove('hidden');
 });
 
-socket.on('updatePlayerList', (players) => {
-    document.getElementById('player-list-lobby').innerHTML = players.map(p => `<li>${p.name}</li>`).join('');
-    updateGameScoreboard(players);
+// --- CHAT ---
+let isChatVisible = true;
+let silencedPlayers = new Set();
+const chatContainer = document.getElementById('chat-container');
+const chatInput = document.getElementById('chat-input');
+const chatToggleBtn = document.getElementById('btn-toggle-chat');
+
+chatToggleBtn.addEventListener('click', () => {
+    isChatVisible = !isChatVisible;
+    const icon = chatToggleBtn.querySelector('.material-icons');
+    if(isChatVisible) {
+        chatContainer.style.display = 'flex';
+        icon.innerText = 'chat';
+        chatToggleBtn.style.opacity = '1';
+    } else {
+        chatContainer.style.display = 'none';
+        icon.innerText = 'chat_bubble_outline';
+        chatToggleBtn.style.opacity = '0.5';
+    }
 });
 
-socket.on('updateScoreboard', updateGameScoreboard);
-function updateGameScoreboard(players) {
-    const list = document.getElementById('live-score-list');
-    players.sort((a,b) => b.score - a.score);
-    list.innerHTML = players.map((p,i) => `<li><span>${i+1}. ${p.name}</span><span style="color:#eab308">${p.score}</span></li>`).join('');
-}
+window.toggleMute = function(playerId, btnElement) {
+    if (playerId === myPlayerId) return;
+    if (silencedPlayers.has(playerId)) {
+        silencedPlayers.delete(playerId);
+        btnElement.innerText = 'volume_up';
+        btnElement.style.color = '#888';
+    } else {
+        silencedPlayers.add(playerId);
+        btnElement.innerText = 'volume_off';
+        btnElement.style.color = '#e11d48';
+    }
+};
 
-// --- UTILS & INPUT ---
-function switchScreen(name) {
-    Object.values(screens).forEach(s => s.classList.remove('active'));
-    if(screens[name]) screens[name].classList.add('active');
-}
+socket.on('chatMessage', (data) => {
+    if (silencedPlayers.has(data.playerId)) return;
+    const chatBox = document.getElementById('chat-messages');
+    const div = document.createElement('div');
+    div.className = 'chat-usr-msg';
+    let muteControl = data.playerId !== myPlayerId ? `<span class="material-icons mute-btn" onclick="toggleMute('${data.playerId}', this)">volume_up</span>` : '';
+    div.innerHTML = `${muteControl} <span class="chat-name">${data.playerName}:</span> ${data.msg}`;
+    chatBox.appendChild(div);
+    chatBox.scrollTop = chatBox.scrollHeight;
+});
 
+function sendChatMessage() {
+    const msg = chatInput.value.trim();
+    if (!msg) return;
+    socket.emit('chatMessage', { roomId: currentRoomId, msg: msg });
+    chatInput.value = "";
+    chatInput.focus();
+}
+document.getElementById('btn-send-chat').addEventListener('click', sendChatMessage);
+chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
+
+// --- UTILS DO JOGO ---
 function createGrid() {
     const grid = document.getElementById('grid');
     grid.innerHTML = '';
@@ -268,7 +309,7 @@ function resetRoundUI(round, total) {
     currentRow = 0; currentTile = 0; currentGuess = "";
     document.getElementById('round-display').innerText = `${round}/${total}`;
     document.getElementById('message-area').style.opacity = '0';
-    document.querySelectorAll('.tile').forEach(t => { t.innerText = ''; t.className = 'tile'; });
+    document.querySelectorAll('.tile').forEach(t => { t.innerText = ''; t.className = 'tile'; t.style.animation = 'none'; });
     createKeyboard();
 }
 
@@ -319,6 +360,12 @@ function updateKeyboard(guess, result) {
     }
 }
 
+function updateGameScoreboard(players) {
+    const list = document.getElementById('live-score-list');
+    players.sort((a,b) => b.score - a.score);
+    list.innerHTML = players.map((p,i) => `<li><span>${i+1}. ${p.name}</span><span style="color:#eab308">${p.score}</span></li>`).join('');
+}
+
 document.addEventListener('keydown', (e) => {
     if (document.activeElement === chatInput) return;
     const key = e.key.toUpperCase();
@@ -332,5 +379,6 @@ document.getElementById('btn-confirm-leave').addEventListener('click', () => {
     document.getElementById('confirm-leave-overlay').classList.add('hidden');
     socket.emit('leaveMatch', currentRoomId);
 });
+socket.on('userDataUpdate', (user) => updateUserDisplay(user));
 socket.on('matchLeft', () => window.location.reload());
 socket.on('error', (msg) => alert(msg));
