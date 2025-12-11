@@ -27,7 +27,6 @@ body {
 
 .screen { display: none; width: 100%; height: 100%; }
 .screen.active { display: flex; flex-direction: column; }
-
 #login-screen, #lobby-screen, #lobby-setup-screen {
     align-items: center; justify-content: center;
     background: radial-gradient(circle, #2c2c2e 0%, #000 100%);
@@ -37,22 +36,19 @@ body {
 .card {
     background: var(--bg-panel); padding: 2rem; border-radius: 12px;
     border: 1px solid #333; width: 100%; max-width: 450px; text-align: center;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
-    display: flex; flex-direction: column;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5); display: flex; flex-direction: column;
 }
 .logo { font-size: 2.2rem; margin-bottom: 1rem; letter-spacing: -1px; }
 .highlight { color: var(--accent-red); }
 
-/* Botão Google */
 .btn-google {
     display: flex; align-items: center; justify-content: center; gap: 10px;
     background: white; color: #333; padding: 12px; border-radius: 6px;
-    text-decoration: none; font-weight: bold; margin-top: 10px;
-    transition: transform 0.2s; width: 100%;
+    text-decoration: none; font-weight: bold; margin-top: 10px; width: 100%;
 }
 .btn-google:active { transform: scale(0.98); }
 
-/* --- DASHBOARD --- */
+/* DASHBOARD */
 #dashboard-screen { background-color: var(--bg-dark); }
 .dashboard-header {
     display: flex; justify-content: space-between; align-items: center;
@@ -65,6 +61,11 @@ body {
 .user-info-text h3 { margin: 0; font-size: 1rem; }
 .energy-badge { color: #eab308; font-weight: bold; font-size: 0.9rem; }
 .btn-logout { color: #888; text-decoration: none; }
+.btn-icon-tiny {
+    background: #333; color: white; border: 1px solid #555; border-radius: 50%; width: 20px; height: 20px;
+    margin-left: 5px; cursor: pointer; font-size: 0.8rem; vertical-align: middle;
+}
+
 .dashboard-content {
     flex: 1; overflow-y: auto; width: 100%; max-width: 600px; margin: 0 auto;
     padding: 20px; display: flex; flex-direction: column; gap: 20px;
@@ -74,7 +75,6 @@ body {
 .row-btns { display: flex; gap: 10px; }
 .row-btns button { flex: 1; }
 
-/* Lista de Salas (Dashboard) */
 .room-browser { width: 100%; padding: 15px; text-align: left; flex: 1; display: flex; flex-direction: column; }
 .room-browser h4 { color: var(--text-white); margin-bottom: 10px; opacity: 0.7; font-size: 0.9rem; }
 #room-list-items { overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 8px; padding-right: 5px; max-height: 200px;}
@@ -90,12 +90,18 @@ body {
 .room-info span { color: #888; font-size: 0.8rem; }
 .room-badge { background: #333; color: #ccc; padding: 2px 6px; border-radius: 3px; font-size: 0.7rem; margin-left: 5px; vertical-align: middle; }
 
-/* --- SETUP & LOBBY DESIGN --- */
+/* SETUP & LOBBY */
 .setup-container { display: flex; flex-direction: column; gap: 15px; width: 100%; }
 .setup-box { background: rgba(0, 0, 0, 0.3); border: 1px solid #333; padding: 15px; border-radius: 8px; transition: border-color 0.3s; }
 .setup-box:hover { border-color: #555; }
 .setup-title { font-size: 0.8rem; color: #888; text-transform: uppercase; margin-bottom: 10px; letter-spacing: 1px; text-align: left; }
 .setup-row { display: flex; align-items: center; justify-content: space-between; gap: 15px; }
+
+/* Room Config */
+.room-config { display: flex; flex-direction: column; gap: 15px; width: 100%; }
+.slider-container { display: flex; flex-direction: column; gap: 5px; width: 100%; }
+.slider-container label { font-size: 0.9rem; color: #ccc; text-align: left; }
+.range-input { width: 100%; accent-color: var(--accent-red); cursor: pointer; }
 
 /* Toggle Switch */
 .toggle-switch { position: relative; display: inline-flex; align-items: center; cursor: pointer; gap: 10px; margin: 0; }
@@ -106,7 +112,14 @@ body {
 .toggle-switch input:checked + .slider:before { transform: translateX(24px); }
 .toggle-label { font-size: 1rem; color: white; font-weight: bold; }
 
-/* Inputs e Botões */
+.toggle-control {
+    display: flex; align-items: center; justify-content: space-between;
+    background-color: var(--bg-input); padding: 10px 15px; border-radius: 8px;
+    border: 1px solid #333; margin-bottom: 0; cursor: pointer; width: 100%;
+}
+.control-label { font-size: 0.9rem; color: #ccc; }
+.toggle-control input { width: auto; margin: 0; }
+
 input { width: 100%; padding: 12px; background: var(--bg-input); border: 1px solid #333; border-radius: 6px; color: white; margin-bottom: 10px; outline: none; }
 input:focus { border-color: var(--accent-red); }
 .btn-primary { width: 100%; padding: 12px; background: var(--accent-red); color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; text-transform: uppercase; transition: background 0.2s; }
@@ -114,8 +127,6 @@ input:focus { border-color: var(--accent-red); }
 .btn-secondary { background: transparent; border: 1px solid #555; color: #ccc; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; }
 .divider { margin: 15px 0; font-size: 0.8rem; color: #666; font-weight: bold; text-transform: uppercase;}
 .join-row { display: flex; gap: 10px; }
-
-/* Lobby Code & Players */
 .lobby-code-display {
     background: #000; border: 1px dashed var(--accent-red); padding: 15px;
     border-radius: 8px; margin: 10px 0 20px 0; font-family: monospace;
@@ -123,26 +134,18 @@ input:focus { border-color: var(--accent-red); }
     cursor: pointer; transition: background 0.2s;
 }
 .lobby-code-display:active { background: #111; transform: scale(0.98); }
-.player-grid {
-    display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
-    gap: 10px; width: 100%; margin: 10px 0; max-height: 200px; overflow-y: auto;
-}
+.player-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 10px; width: 100%; margin: 10px 0; max-height: 200px; overflow-y: auto; }
 .player-card {
-    background: var(--bg-input); border: 1px solid #333; border-radius: 8px;
-    padding: 10px; display: flex; flex-direction: column; align-items: center;
-    gap: 5px; position: relative; animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    background: var(--bg-input); border: 1px solid #333; border-radius: 8px; padding: 10px;
+    display: flex; flex-direction: column; align-items: center; gap: 5px; position: relative;
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 .player-card img { width: 40px; height: 40px; border-radius: 50%; border: 2px solid #555; }
 .player-card.is-host img { border-color: var(--color-present); }
 .player-card span { font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-.host-badge {
-    font-size: 0.6rem; background: var(--color-present); color: black;
-    padding: 1px 4px; border-radius: 3px; font-weight: bold;
-    margin-top: -12px; z-index: 1;
-}
+.host-badge { font-size: 0.6rem; background: var(--color-present); color: black; padding: 1px 4px; border-radius: 3px; font-weight: bold; margin-top: -12px; z-index: 1; }
 .lobby-header-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; width: 100%; }
 
-/* Mode Selection Cards */
 .mode-selection-container { display: flex; gap: 10px; margin-bottom: 20px; }
 .mode-option { flex: 1; position: relative; }
 .mode-option input { position: absolute; opacity: 0; height: 0; width: 0; }
@@ -157,12 +160,11 @@ input:focus { border-color: var(--accent-red); }
 .btn-start-pulse { animation: pulse-glow 2s infinite; }
 @keyframes pulse-glow { 0% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(225, 29, 72, 0); } 100% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0); } }
 
-/* Chat Lobby */
 .lobby-chat-wrapper { margin-top: 15px; border-top: 1px solid #333; padding-top: 10px; display: flex; flex-direction: column; height: 150px; }
 .lobby-chat-messages { flex: 1; overflow-y: auto; background: rgba(0,0,0,0.2); border-radius: 4px; padding: 5px; margin-bottom: 5px; font-size: 0.85rem; text-align: left; }
 .lobby-chat-input-box { display: flex; gap: 5px; }
 
-/* === GAME LAYOUT === */
+/* GAME LAYOUT */
 .game-layout { flex-direction: row; }
 #scoreboard-container { width: 25%; min-width: 220px; background: var(--bg-panel); border-right: 1px solid #333; display: flex; flex-direction: column; }
 .panel-header { padding: 15px; background: rgba(0,0,0,0.2); border-bottom: 1px solid #333; font-weight: bold; display: flex; align-items: center; gap: 8px; color: var(--accent-red); }
@@ -175,22 +177,22 @@ input:focus { border-color: var(--accent-red); }
 #btn-leave-match { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: rgba(225, 29, 72, 0.1); border: 1px solid var(--accent-red); color: var(--accent-red); border-radius: 8px; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer; }
 #message-area { position: absolute; top: 60px; left: 0; right: 0; z-index: 1000; height: 40px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; font-weight: bold; text-align: center; color: white; text-shadow: 0 2px 4px black; background: rgba(0,0,0,0.85); border-radius: 20px; width: fit-content; margin: 0 auto; padding: 0 25px; pointer-events: none; opacity: 0; transition: opacity 0.3s; }
 #game-stage { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow-y: auto; padding: 10px; padding-bottom: 0; }
-#grid { display: grid; grid-template-rows: repeat(6, 1fr); gap: 5px; width: 280px; aspect-ratio: 5/6; margin-bottom: 10px; flex-shrink: 0;}
-.grid-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; }
-.tile { border: 2px solid var(--tile-border); display: flex; justify-content: center; align-items: center; font-size: 1.6rem; font-weight: bold; text-transform: uppercase; }
+#grid { display: grid; grid-template-rows: repeat(6, 1fr); gap: 8px; width: 100%; max-width: 380px; aspect-ratio: 5/6; margin-bottom: 20px; flex-shrink: 0;}
+.grid-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+.tile { font-size: 2rem; border: 2px solid var(--tile-border); display: flex; justify-content: center; align-items: center; font-weight: bold; text-transform: uppercase; }
 .tile.filled { border-color: var(--tile-filled); animation: pop 0.1s; }
 .tile.correct { background: var(--color-correct); border: none; }
 .tile.present { background: var(--color-present); border: none; }
 .tile.absent { background: var(--color-absent); border: none; }
-#keyboard { width: 100%; max-width: 500px; flex-shrink: 0; margin-bottom: 5px; }
+#keyboard { width: 100%; max-width: 600px; flex-shrink: 0; margin-bottom: 10px; }
 .row { display: flex; width: 100%; gap: 5px; margin-bottom: 5px; justify-content: center; }
-#keyboard button { flex: 1; height: 45px; border: none; border-radius: 4px; background: var(--tile-filled); color: white; font-weight: bold; cursor: pointer; }
+#keyboard button { flex: 1; height: 55px; font-size: 1rem; border: none; border-radius: 4px; background: var(--tile-filled); color: white; font-weight: bold; cursor: pointer; }
 .wide-key { flex: 1.5 !important; }
 #keyboard button.correct { background: var(--color-correct); }
 #keyboard button.present { background: var(--color-present); }
 #keyboard button.absent { background: var(--color-absent); opacity: 0.5; }
 
-/* Chat Game */
+/* Chat Absoluto */
 #chat-and-controls-wrapper { position: absolute; bottom: 0; left: 0; right: 0; width: 100%; z-index: 15; background-color: var(--bg-panel); border-top: 1px solid #333; display: flex; flex-direction: column; }
 .chat-controls-bar { width: 100%; height: 30px; display: flex; align-items: center; justify-content: flex-end; padding: 0 10px; background: rgba(0,0,0,0.2); border-bottom: 1px solid #333; }
 .btn-icon-small { background: transparent; border: none; color: #888; cursor: pointer; padding: 2px; display: flex; align-items: center; }
@@ -204,7 +206,6 @@ input:focus { border-color: var(--accent-red); }
 #chat-input { margin: 0; padding: 5px 10px; font-size: 0.9rem; background: rgba(0,0,0,0.3); }
 #btn-send-chat { width: 40px; background: var(--accent-red); border: none; border-radius: 6px; color: white; cursor: pointer; display: flex; align-items: center; justify-content: center;}
 
-/* Modais */
 .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 3000; display: none; align-items: center; justify-content: center; }
 .modal-overlay:not(.hidden) { display: flex !important; }
 .modal-card { border: 1px solid var(--accent-red); box-shadow: 0 0 20px rgba(225, 29, 72, 0.2); width: 90%; max-width: 350px; padding: 25px; text-align: center; position: relative; background: var(--bg-panel); border-radius: 12px; }
@@ -213,18 +214,23 @@ input:focus { border-color: var(--accent-red); }
 .modal-actions { display: flex; gap: 10px; justify-content: center; }
 .modal-actions button { flex: 1; padding: 10px; }
 .wide { max-width: 500px; height: 80%; }
+.hidden { display: none !important; }
 
-/* Mobile */
 @media (max-width: 768px) {
     .game-layout { flex-direction: column; }
     #scoreboard-container { width: 100%; height: 50px; border-right: none; border-bottom: 1px solid #333; display: flex; flex-direction: row; align-items: center; }
     #scoreboard-container .panel-header { border: none; padding: 0 10px; font-size: 0.8rem; width: auto; }
-    #scoreboard-container .styled-list { display: flex; flex-direction: row; padding: 5px; gap: 10px; }
-    #scoreboard-container li { padding: 2px 8px; white-space: nowrap; background: rgba(255,255,255,0.1); }
+    #scoreboard-container .styled-list { display: flex; flex-direction: row; padding: 5px; gap: 10px; overflow-x: auto; white-space: nowrap; align-items: center; width: 100%; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+    #scoreboard-container .styled-list::-webkit-scrollbar { display: none; }
+    #scoreboard-container li { padding: 4px 10px; white-space: nowrap; background: rgba(255,255,255,0.1); min-width: fit-content; display: flex; align-items: center; gap: 5px; }
+
     #main-game-area { width: 100%; height: calc(100svh - 50px); padding-bottom: 0; }
     #game-stage { padding-bottom: 110px; }
-    #grid { width: 260px; margin-bottom: 2px; } .tile { font-size: 1.5rem; }
-    #keyboard { margin-bottom: 0; }
+    #grid { width: 100%; max-width: 300px; gap: 5px; margin-bottom: 5px; } 
+    .grid-row { gap: 5px; } .tile { font-size: 1.6rem; border: 2px solid var(--tile-border); }
+    #keyboard { max-width: 100%; margin-bottom: 0; }
+    #keyboard button { height: 42px; font-size: 0.85rem; }
+
     #chat-and-controls-wrapper { position: fixed; bottom: 0; z-index: 2000; }
     #chat-container { height: 70px; }
     #chat-input-wrapper { height: 30px; }

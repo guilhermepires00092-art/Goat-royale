@@ -13,7 +13,6 @@
     <div id="login-screen" class="screen active">
         <div class="card login-card">
             <h1 class="logo">GOAT <span class="highlight">ROYALE</span></h1>
-            
             <a href="/auth/google" class="btn-google">
                 <img src="https://cdn-icons-png.flaticon.com/512/2991/2991148.png" alt="G" width="20">
                 Entrar com Google
@@ -28,10 +27,13 @@
                 <img id="user-avatar" src="" alt="Avatar">
                 <div class="user-info-text">
                     <h3 id="user-name">...</h3>
-                    <span class="energy-badge">⚡ <span id="user-energy">--</span></span>
+                    <span class="energy-badge">
+                        ⚡ <span id="user-energy">--</span>/5
+                        <button class="btn-icon-tiny" onclick="document.getElementById('energy-info-modal').classList.remove('hidden')">?</button>
+                    </span>
                 </div>
             </div>
-            <a href="/auth/logout" class="btn-logout"><span class="material-icons">logout</span></a>
+            <a href="/auth/logout" class="btn-logout" title="Sair"><span class="material-icons">logout</span></a>
         </header>
 
         <div class="dashboard-content">
@@ -42,7 +44,6 @@
                     <button id="btn-view-leaderboard" class="btn-secondary">RANKING</button>
                 </div>
             </div>
-
             <div class="room-browser card">
                 <h4>SALAS PÚBLICAS</h4>
                 <div id="room-list-items">
@@ -52,7 +53,7 @@
         </div>
     </div>
 
-    <!-- 3. TELA DE SETUP (CRIAR/ENTRAR) - DESIGN NOVO -->
+    <!-- 3. TELA DE SETUP -->
     <div id="lobby-setup-screen" class="screen">
         <div class="card login-card" style="max-width: 500px;">
             <div style="width: 100%; text-align: left; margin-bottom: 10px;">
@@ -60,25 +61,26 @@
                     <span class="material-icons">arrow_back</span> Voltar
                 </button>
             </div>
-            
-            <h2 style="margin-bottom: 20px;">NOVA PARTIDA</h2>
-            
+            <h2>NOVA PARTIDA</h2>
             <div class="setup-container">
-                <!-- Caixa de Criação -->
                 <div class="setup-box">
                     <div class="setup-title">CRIAR SALA</div>
                     <div class="setup-row">
-                        <!-- Toggle Switch Moderno -->
-                        <label class="toggle-switch">
+                        <label class="toggle-control">
                             <input type="checkbox" id="public-room-check">
                             <span class="slider"></span>
                             <span class="toggle-label">Pública</span>
                         </label>
-                        <button id="btn-create-room" class="btn-primary" style="padding: 8px 20px; font-size: 0.9rem;">CRIAR</button>
+                        
+                        <!-- SLIDER DE JOGADORES -->
+                        <div class="slider-container" style="flex:1; margin-left:10px;">
+                            <label style="font-size:0.8rem; color:#ccc;">Max: <span id="player-limit-display" style="color:var(--color-present); font-weight:bold;">10</span></label>
+                            <input type="range" id="room-size-slider" min="2" max="20" value="10" class="range-input">
+                        </div>
                     </div>
+                    <button id="btn-create-room" class="btn-primary" style="width:100%; margin-top:10px;">CRIAR</button>
                 </div>
 
-                <!-- Caixa de Entrada -->
                 <div class="setup-box">
                     <div class="setup-title">ENTRAR COM CÓDIGO</div>
                     <div class="join-row">
@@ -90,55 +92,47 @@
         </div>
     </div>
 
-    <!-- 4. TELA DE LOBBY (AGUARDANDO) -->
+    <!-- 4. LOBBY -->
     <div id="lobby-screen" class="screen">
         <div class="card lobby-card" style="max-width: 600px;">
-            
-            <!-- Header do Lobby com Botão Voltar -->
             <div class="lobby-header-actions">
-                <button id="btn-leave-lobby" style="background:none; border:none; color:#e11d48; cursor:pointer; display:flex; align-items:center; gap:5px; font-weight:bold;">
+                <button id="btn-leave-lobby" style="background:none; border:none; color:#e11d48; cursor:pointer; font-weight:bold;">
                     <span class="material-icons">arrow_back</span> SAIR
                 </button>
                 <span style="color:#666; font-size:0.8rem;">AGUARDANDO</span>
             </div>
-
             <h3 style="color: #888; font-size: 0.8rem; margin-top: 10px;">CÓDIGO DA SALA</h3>
             <div class="lobby-code-display" id="lobby-code" onclick="navigator.clipboard.writeText(this.innerText); alert('Copiado!')">...</div>
-
-            <!-- Grid de Jogadores -->
             <div class="list-container">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <h3>JOGADORES</h3>
-                    <span id="player-count-badge" style="background:#333; padding:2px 6px; border-radius:4px; font-size:0.8rem">0/10</span>
+                    <span id="player-count-badge" style="background:#333; padding:2px 6px; border-radius:4px; font-size:0.8rem">0/--</span>
                 </div>
                 <div id="player-list-lobby" class="player-grid"></div>
             </div>
-
-            <!-- Controles do Host (NOVO DESIGN) -->
+            
+            <!-- CONTROLES DO HOST -->
             <div id="host-controls" style="display: none; margin-top: 15px; width: 100%; border-top: 1px solid #333; padding-top: 15px;">
-                <p style="margin-bottom: 10px; font-size: 0.9rem; color: #ccc;">SELECIONE O MODO:</p>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
+                    <p style="font-size: 0.9rem; color: #ccc; margin:0;">SELECIONE O MODO:</p>
+                    <!-- BOTÃO DE DÚVIDA DO MODO -->
+                    <button class="btn-icon-tiny" onclick="document.getElementById('gamemode-info-modal').classList.remove('hidden')">?</button>
+                </div>
+                
                 <div class="mode-selection-container">
                     <label class="mode-option">
                         <input type="radio" name="game-mode" value="default" checked>
-                        <div class="mode-card-visual">
-                            <span class="icon">⚔️</span>
-                            <span class="label">Battle Royale</span>
-                        </div>
+                        <div class="mode-card-visual"><span class="icon">⚔️</span><span class="label">Battle Royale</span></div>
                     </label>
                     <label class="mode-option">
                         <input type="radio" name="game-mode" value="competitive">
-                        <div class="mode-card-visual">
-                            <span class="icon">🏆</span>
-                            <span class="label">Speedrun</span>
-                        </div>
+                        <div class="mode-card-visual"><span class="icon">🏆</span><span class="label">Speedrun</span></div>
                     </label>
                 </div>
                 <button id="btn-start-game" class="btn-primary btn-start-pulse">INICIAR PARTIDA</button>
             </div>
             
-            <p id="waiting-msg" class="pulse" style="margin-top: 20px;">O anfitrião está configurando a partida...</p>
-
-            <!-- CHAT DO LOBBY -->
+            <p id="waiting-msg" class="pulse" style="margin-top: 20px;">Aguardando o anfitrião...</p>
             <div class="lobby-chat-wrapper">
                 <div id="lobby-chat-messages" class="lobby-chat-messages">
                     <div style="color:var(--accent-red); font-style:italic; padding: 5px;">Chat da Sala...</div>
@@ -148,31 +142,26 @@
                     <button id="btn-send-lobby-chat" class="btn-primary" style="width: 40px; padding: 0;"><span class="material-icons">send</span></button>
                 </div>
             </div>
-
         </div>
     </div>
 
-    <!-- 5. TELA DE JOGO -->
+    <!-- 5. JOGO -->
     <div id="game-screen" class="screen game-layout">
         <aside id="scoreboard-container">
             <div class="panel-header"><span class="material-icons">leaderboard</span> RANK</div>
             <ul id="live-score-list" class="styled-list score-list"></ul>
         </aside>
-        
         <main id="main-game-area">
             <header id="game-header">
                 <div class="badge">ROUND <strong id="round-display">1/10</strong></div>
                 <div class="badge timer-badge"><span class="material-icons">timer</span> <strong id="timer">45</strong></div>
                 <button id="btn-leave-match" class="btn-icon-danger" title="Sair"><span class="material-icons">logout</span></button>
             </header>
-            
             <div id="message-area"></div>
-            
             <div id="game-stage">
                 <div id="grid-container"><div id="grid"></div></div>
                 <div id="keyboard"></div>
             </div>
-            
             <div id="chat-and-controls-wrapper">
                 <div class="chat-controls-bar">
                     <button id="btn-toggle-chat" class="btn-icon-small"><span class="material-icons">chat</span></button>
@@ -189,6 +178,45 @@
     </div>
 
     <!-- MODAIS -->
+    
+    <!-- Info Energia -->
+    <div id="energy-info-modal" class="hidden modal-overlay">
+        <div class="card modal-card">
+            <button class="close-modal" onclick="document.getElementById('energy-info-modal').classList.add('hidden')">×</button>
+            <h3>SISTEMA DE ENERGIA ⚡</h3>
+            <p style="text-align: left; line-height: 1.5; color: #ccc;">
+                • Você tem <strong>5 energias</strong> máximas.<br><br>
+                • Cada partida custa <strong>1 energia</strong>.<br><br>
+                • Sua energia recarrega para 5 automaticamente <strong>todo dia</strong> (se você gastar).
+            </p>
+        </div>
+    </div>
+
+    <!-- NOVO: Info Modos de Jogo -->
+    <div id="gamemode-info-modal" class="hidden modal-overlay">
+        <div class="card modal-card">
+            <button class="close-modal" onclick="document.getElementById('gamemode-info-modal').classList.add('hidden')">×</button>
+            <h3>MODOS DE JOGO</h3>
+            
+            <div style="text-align: left; margin-bottom: 20px;">
+                <h4 style="color:var(--color-present); margin-bottom:5px;">⚔️ Battle Royale</h4>
+                <p style="color:#ccc; font-size:0.9rem; line-height:1.4;">
+                    Modo clássico. A rodada dura 45 segundos.
+                    <br><strong>Pontuação:</strong> Baseada na ordem de chegada (1º ganha 10pts, 2º ganha 9pts...).
+                </p>
+            </div>
+
+            <div style="text-align: left;">
+                <h4 style="color:var(--accent-red); margin-bottom:5px;">🏆 Competitivo (Speedrun)</h4>
+                <p style="color:#ccc; font-size:0.9rem; line-height:1.4;">
+                    Modo hardcore. O <strong>PRIMEIRO</strong> a acertar encerra a rodada para <strong>TODOS</strong> imediatamente!
+                    <br><strong>Pontuação:</strong> Baseada na precisão (10 pts - nº de chutes). Só o vencedor pontua.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Perfil -->
     <div id="profile-modal" class="hidden modal-overlay">
         <div class="card modal-card">
             <button class="close-modal" onclick="closeModals()">×</button>
@@ -196,11 +224,12 @@
             <div class="profile-stats">
                 <div class="stat-item"><strong>Pontos:</strong> <span id="p-score">0</span></div>
                 <div class="stat-item"><strong>Vitórias:</strong> <span id="p-wins">0</span></div>
-                <div class="stat-item"><strong>Jogos:</strong> <span id="p-games">0</span></div>
+                <div class="stat-item"><strong>Partidas:</strong> <span id="p-games">0</span></div>
             </div>
         </div>
     </div>
 
+    <!-- Ranking -->
     <div id="leaderboard-modal" class="hidden modal-overlay">
         <div class="card modal-card wide">
             <button class="close-modal" onclick="closeModals()">×</button>
@@ -209,6 +238,7 @@
         </div>
     </div>
 
+    <!-- Sair -->
     <div id="confirm-leave-overlay" class="hidden modal-overlay">
         <div class="card modal-card">
             <h3>Sair?</h3>
@@ -220,6 +250,7 @@
         </div>
     </div>
 
+    <!-- Game Over -->
     <div id="game-over-overlay" class="hidden modal-overlay">
         <div class="card results-card">
             <h2 id="game-over-title">FIM DE JOGO</h2>
