@@ -1,12 +1,9 @@
 const socket = io();
 
 // ===========================================
-// COLE SUA LISTA CLIENT_WORDS AQUI
+// COLE A LISTA GIGANTE AQUI (CLIENT_WORDS)
 // ===========================================
-const CLIENT_WORDS = [
-    // ... COLE AQUI ...
-    "ABATA", "ABOCA"
-];
+const CLIENT_WORDS = [ "ABATA", "ABOCA" ]; // Exemplo
 
 // Elementos
 const screens = {
@@ -19,7 +16,6 @@ const screens = {
 
 const messageArea = document.getElementById('message-area');
 const chatInput = document.getElementById('chat-input');
-const chatSendBtn = document.getElementById('btn-send-chat');
 const chatToggleBtn = document.getElementById('btn-toggle-chat'); 
 const chatContainer = document.getElementById('chat-container');
 
@@ -53,7 +49,7 @@ function switchScreen(name) {
     if(screens[name]) screens[name].classList.add('active');
 }
 
-// Slider de Tamanho da Sala (Visual)
+// Slider Visual
 const roomSizeSlider = document.getElementById('room-size-slider');
 const roomSizeDisplay = document.getElementById('player-limit-display');
 if (roomSizeSlider) {
@@ -71,7 +67,6 @@ document.getElementById('btn-view-profile').addEventListener('click', () => {
         document.getElementById('profile-modal').classList.remove('hidden');
     });
 });
-
 document.getElementById('btn-view-leaderboard').addEventListener('click', () => {
     fetch('/api/leaderboard').then(r=>r.json()).then(players => {
         const list = document.getElementById('global-leaderboard-list');
@@ -83,7 +78,6 @@ document.getElementById('btn-view-leaderboard').addEventListener('click', () => 
         document.getElementById('leaderboard-modal').classList.remove('hidden');
     });
 });
-
 window.closeModals = () => document.querySelectorAll('.modal-overlay').forEach(el => el.classList.add('hidden'));
 
 // === JOGO E SOCKETS ===
@@ -92,39 +86,27 @@ document.getElementById('btn-create-room').addEventListener('click', () => {
     const size = document.getElementById('room-size-slider').value;
     socket.emit('createRoom', { isPublic: isPublic, roomSize: size });
 });
-
 document.getElementById('btn-join-room').addEventListener('click', () => {
     const code = document.getElementById('room-code-input').value;
     if(code) socket.emit('joinRoom', { roomId: code });
 });
-
 document.getElementById('btn-start-game').addEventListener('click', () => {
     const mode = document.querySelector('input[name="game-mode"]:checked').value;
     socket.emit('startGame', { roomId: currentRoomId, gameMode: mode });
 });
 
+// Lista de Salas
 socket.on('updateRoomList', (rooms) => {
     const container = document.getElementById('room-list-items');
     if (!container) return;
     container.innerHTML = '';
-    if (rooms.length === 0) return container.innerHTML = '<p style="text-align:center; color:#666; font-size:0.9rem;">Nenhuma sala pública encontrada.</p>';
+    if (rooms.length === 0) return container.innerHTML = '<p style="text-align:center; color:#666; font-size:0.9rem;">Nenhuma sala pública.</p>';
     rooms.forEach(r => {
         const el = document.createElement('div');
         el.className = 'room-item';
         const modeBadge = r.gameMode === 'competitive' ? '🏆' : '⚔️';
-        el.innerHTML = `
-            <div class="room-info">
-                <strong>${r.hostName}'s Room <span class="room-badge">${modeBadge}</span></strong>
-                <span>${r.playerCount} / ${r.maxPlayers} Jogadores</span>
-            </div>
-            <span class="material-icons" style="color:#666; font-size:1rem;">arrow_forward_ios</span>
-        `;
-        el.onclick = () => {
-            el.style.transform = "scale(0.98)";
-            setTimeout(() => el.style.transform = "scale(1)", 100);
-            document.getElementById('room-code-input').value = r.id;
-            socket.emit('joinRoom', { roomId: r.id });
-        };
+        el.innerHTML = `<div class="room-info"><strong>${r.hostName}'s Room <span class="room-badge">${modeBadge}</span></strong><span>${r.playerCount} / ${r.maxPlayers} Jogadores</span></div><span class="material-icons" style="color:#666; font-size:1rem;">arrow_forward_ios</span>`;
+        el.onclick = () => { el.style.transform = "scale(0.98)"; setTimeout(() => el.style.transform = "scale(1)", 100); document.getElementById('room-code-input').value = r.id; socket.emit('joinRoom', { roomId: r.id }); };
         container.appendChild(el);
     });
 });
@@ -140,24 +122,16 @@ socket.on('roomJoined', (data) => {
 
 socket.on('updatePlayerList', (players) => {
     const lobbyList = document.getElementById('player-list-lobby');
-    const max = players[0]?.roomId ? 10 : '--'; // Fallback se nao tiver dados
     if (lobbyList) {
-        // Tenta pegar o limite do primeiro player (impreciso mas funciona para visualização)
         document.getElementById('player-count-badge').innerText = `${players.length}/MAX`;
-        
         lobbyList.innerHTML = players.map(p => {
             const hostBadge = p.isHost ? '<div class="host-badge">HOST</div>' : '';
             const avatarUrl = p.avatar || 'https://cdn-icons-png.flaticon.com/512/847/847969.png'; 
-            return `
-            <div class="player-card ${p.isHost ? 'is-host' : ''}">
-                <img src="${avatarUrl}" alt="Avatar">
-                ${hostBadge}
-                <span>${p.name}</span>
-            </div>
-            `;
+            return `<div class="player-card ${p.isHost ? 'is-host' : ''}"><img src="${avatarUrl}" alt="Avatar">${hostBadge}<span>${p.name}</span></div>`;
         }).join('');
     }
 
+    // Herança de Host
     const myData = players.find(p => p.id === socket.id);
     const hostControls = document.getElementById('host-controls');
     const waitingMsg = document.getElementById('waiting-msg');
@@ -169,11 +143,10 @@ socket.on('updatePlayerList', (players) => {
         if(hostControls) hostControls.style.display = 'none';
         if(waitingMsg) waitingMsg.style.display = 'block';
     }
-
     updateGameScoreboard(players);
 });
 
-socket.on('youAreHost', () => alert("O anfitrião saiu. Você é o novo anfitrião!"));
+socket.on('youAreHost', () => alert("Você é o novo anfitrião!"));
 
 // --- JOGO ---
 let currentRoomId = null; let currentRow = 0; let currentTile = 0; let currentGuess = ""; let isGameActive = false; let isRoundSolved = false; let silencedPlayers = new Set(); let isChatVisible = true;
@@ -209,18 +182,14 @@ socket.on('guessResult', ({ guess, result }) => {
         }
     }
 });
-
 socket.on('roundSuccess', (msg) => setTimeout(() => showMessage(msg, "#22c55e"), 1500));
 socket.on('roundEnded', (word) => { isGameActive = false; if(!isRoundSolved) showMessage(`PALAVRA: ${word}`, "#fff"); });
-
 socket.on('gameOver', (players) => {
     const overlay = document.getElementById('game-over-overlay');
     const list = document.getElementById('final-results');
     const title = document.getElementById('game-over-title');
     players.sort((a,b) => b.score - a.score);
-    
     if(title) title.innerHTML = `<span style="color:#eab308">${players[0].name}</span> É O GOAT 🐐`;
-
     list.innerHTML = players.map((p,i) => `<div style="margin:10px; font-size:1.2rem">${i===0?'👑':`#${i+1}`} <strong>${p.name}</strong>: ${p.score} pts</div>`).join('');
     overlay.classList.remove('hidden');
 });
@@ -235,17 +204,13 @@ chatToggleBtn.addEventListener('click', () => {
     if(isChatVisible) { chatContainer.style.display = 'flex'; icon.innerText = 'chat'; chatToggleBtn.style.opacity = '1'; }
     else { chatContainer.style.display = 'none'; icon.innerText = 'chat_bubble_outline'; chatToggleBtn.style.opacity = '0.5'; }
 });
-
 window.toggleMute = function(pid, btn) {
     if(pid === myPlayerId) return;
     if(silencedPlayers.has(pid)) { silencedPlayers.delete(pid); btn.innerText = 'volume_up'; btn.style.color = '#888'; }
     else { silencedPlayers.add(pid); btn.innerText = 'volume_off'; btn.style.color = '#e11d48'; }
 };
-
 socket.on('chatMessage', (data) => {
     if (silencedPlayers.has(data.playerId)) return;
-
-    // Chat Jogo
     const gameBox = document.getElementById('chat-messages');
     if (gameBox && document.getElementById('game-screen').classList.contains('active')) {
         const d = document.createElement('div'); d.className = 'chat-usr-msg';
@@ -253,8 +218,6 @@ socket.on('chatMessage', (data) => {
         d.innerHTML = `${mute} <span class="chat-name">${data.playerName}:</span> ${data.msg}`;
         gameBox.appendChild(d); gameBox.scrollTop = gameBox.scrollHeight;
     }
-
-    // Chat Lobby
     const lobbyBox = document.getElementById('lobby-chat-messages');
     if (lobbyBox && document.getElementById('lobby-screen').classList.contains('active')) {
         const d = document.createElement('div'); d.style.marginBottom = "4px";
