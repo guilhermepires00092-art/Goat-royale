@@ -1,432 +1,436 @@
-let socket; 
-let myPlayerId = null;
+require('dotenv').config();
+const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
+const mongoose = require('mongoose');
+const session = require('express-session');
+const MongoStore = require('connect-mongo');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const rateLimit = require('express-rate-limit');
 
-const CLIENT_WORDS = [
-    "ABATA", "ABOCA" // MESMA LISTA DO SERVER
+const app = express();
+// Configuração essencial para o Google aceitar o https do Render
+app.set('trust proxy', 1);
+
+const server = http.createServer(app);
+
+// Configuração do Socket para estabilidade
+const io = new Server(server, {
+    pingTimeout: 60000,
+    pingInterval: 25000,
+    transports: ['websocket', 'polling']
+});
+
+// === LIMITES DE SEGURANÇA ===
+const MAX_GLOBAL_PLAYERS = 500; 
+const MAX_ROOMS = 50;
+const ROUND_TIME = 45; 
+const TOTAL_ROUNDS = 10;
+
+// ===========================================================================
+// ÁREA DE COLAGEM DA LISTA DE PALAVRAS (SERVER)
+// ===========================================================================
+const WORDS = [
+    // >>> COLE AQUI A SUA LISTA GIGANTE <<<
 ];
 
-// Elementos Globais
-const screens = {
-    login: document.getElementById('login-screen'),
-    dashboard: document.getElementById('dashboard-screen'),
-    setup: document.getElementById('lobby-setup-screen'),
-    lobby: document.getElementById('lobby-screen'),
-    game: document.getElementById('game-screen')
-};
+// === 1. CONEXÃO MONGODB ===
+mongoose.connect(process.env.MONGO_URI)
+    .then(() => console.log('✅ MongoDB Conectado'))
+    .catch(err => console.error('❌ Erro Mongo:', err));
 
-const messageArea = document.getElementById('message-area');
-const chatInput = document.getElementById('chat-input');
-const chatToggleBtn = document.getElementById('btn-toggle-chat'); 
-const chatContainer = document.getElementById('chat-container');
+// === 2. MODELO DE USUÁRIO ===
+const userSchema = new mongoose.Schema({
+    googleId: { type: String, required: true, unique: true },
+    username: String,
+    avatar: String,
+    score: { type: Number, default: 0 },
+    energy: { type: Number, default: 5 }, 
+    wins: { type: Number, default: 0 },
+    gamesPlayed: { type: Number, default: 0 },
+    lastIp: String,
+    lastDailyLogin: { type: Date, default: Date.now }, 
+    createdAt: { type: Date, default: Date.now }
+});
+const User = mongoose.model('User', userSchema);
 
-// ESTADO DO JOGO COM CURSOR
-let currentRoomId = null;
-let currentRow = 0;
-let currentTile = 0; // Índice do cursor (0 a 4)
-let currentGuessArr = ["", "", "", "", ""]; 
-let isGameActive = false;
-let isRoundSolved = false;
-let silencedPlayers = new Set();
-let isChatVisible = true;
+// === 3. PASSPORT ===
+passport.use(new GoogleStrategy({
+    clientID: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL: "/auth/google/callback"
+  },
+  async (accessToken, refreshToken, profile, done) => {
+    try {
+        let user = await User.findOne({ googleId: profile.id });
+        if (!user) {
+            user = await User.create({
+                googleId: profile.id,
+                username: profile.displayName,
+                avatar: profile.photos[0].value,
+                energy: 5
+            });
+        }
+        return done(null, user);
+    } catch (err) { return done(err, null); }
+  }
+));
 
-// === 1. INICIALIZAÇÃO ===
-fetch('/api/me')
-    .then(res => {
-        if (res.ok) return res.json();
-        throw new Error('Not logged');
-    })
-    .then(user => {
-        updateUserDisplay(user);
-        initializeSocket();
-        switchScreen('dashboard');
-    })
-    .catch(() => {
-        switchScreen('login');
-    });
+passport.serializeUser((user, done) => done(null, user.id));
+passport.deserializeUser((id, done) => User.findById(id).then(u => done(null, u)));
 
-function updateUserDisplay(user) {
-    document.getElementById('user-name').innerText = user.username;
-    document.getElementById('user-avatar').src = user.avatar;
-    document.getElementById('user-energy').innerText = user.energy;
+// === 4. MIDDLEWARES ===
+const sessionMiddleware = session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    store: MongoStore.create({ mongoUrl: process.env.MONGO_URI }),
+    cookie: { maxAge: 24 * 60 * 60 * 1000, secure: true, sameSite: 'none' }
+});
+
+const loginLimiter = rateLimit({
+    windowMs: 60 * 1000, max: 10, message: "Muitas tentativas.",
+    standardHeaders: true, legacyHeaders: false,
+});
+
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(sessionMiddleware);
+app.use(passport.initialize());
+app.use(passport.session());
+
+const wrap = middleware => (socket, next) => middleware(socket.request, {}, next);
+io.use(wrap(sessionMiddleware));
+io.use(wrap(passport.initialize()));
+io.use(wrap(passport.session()));
+
+io.use((socket, next) => {
+    if (socket.request.user) next();
+    else next(new Error('unauthorized'));
+});
+
+// Rotas
+app.use('/auth/google', loginLimiter, (req, res, next) => {
+    if (req.user) return next(); 
+    if (io.engine.clientsCount >= MAX_GLOBAL_PLAYERS) return res.status(503).send('Servidor Lotado');
+    next();
+});
+app.get('/auth/google', passport.authenticate('google', { scope: ['profile'] }));
+app.get('/auth/google/callback', passport.authenticate('google', { failureRedirect: '/' }), (req, res) => res.redirect('/'));
+app.get('/auth/logout', (req, res, next) => { req.logout(err => { if(err) return next(err); res.redirect('/'); }); });
+app.get('/api/me', (req, res) => { if (!req.user) return res.status(401).json({ error: 'Not logged' }); res.json(req.user); });
+app.get('/api/leaderboard', async (req, res) => {
+    try { const players = await User.find().sort({ score: -1 }).limit(20).select('username score avatar wins'); res.json(players); } 
+    catch(e) { res.status(500).json([]); }
+});
+
+// Estado Global
+const rooms = {};
+
+function generateRoomId() { return Math.floor(100000 + Math.random() * 900000).toString(); }
+
+function emitRoomList() {
+    const availableRooms = Object.values(rooms)
+        .filter(r => r.isPublic && Object.keys(r.players).length < r.maxPlayers && r.state === 'LOBBY')
+        .map(r => ({
+            id: r.id, hostName: r.players[r.host]?.name || '?', playerCount: Object.keys(r.players).length,
+            maxPlayers: r.maxPlayers, gameMode: r.gameMode
+        }));
+    io.emit('updateRoomList', availableRooms);
 }
 
-// === 2. SOCKET ===
-function initializeSocket() {
-    socket = io();
+function emitPlayerUpdates(roomId) {
+    const room = rooms[roomId];
+    if (!room) return;
+    const list = Object.values(room.players);
+    // ATENÇÃO: Envia a lista E o maxPlayers para o frontend corrigir o contador (Ex: 1/20)
+    io.to(roomId).emit('updatePlayerList', list, room.maxPlayers);
+    io.to(roomId).emit('updateScoreboard', list);
+    emitRoomList();
+}
 
-    socket.on('updateRoomList', (rooms) => {
-        const container = document.getElementById('room-list-items');
-        if (!container) return;
-        container.innerHTML = '';
-        if (rooms.length === 0) return container.innerHTML = '<p style="text-align:center; color:#666; font-size:0.9rem;">Nenhuma sala pública.</p>';
-        rooms.forEach(r => {
-            const el = document.createElement('div');
-            el.className = 'room-item';
-            const modeBadge = r.gameMode === 'competitive' ? '🏆' : '⚔️';
-            el.innerHTML = `<div class="room-info"><strong>${r.hostName}'s Room <span class="room-badge">${modeBadge}</span></strong><span>${r.playerCount} / ${r.maxPlayers} Jogadores</span></div><span class="material-icons" style="color:#666; font-size:1rem;">arrow_forward_ios</span>`;
-            el.onclick = () => { document.getElementById('room-code-input').value = r.id; socket.emit('joinRoom', { roomId: r.id }); };
-            container.appendChild(el);
-        });
-    });
+async function checkDailyReset(userId) {
+    try {
+        const user = await User.findById(userId);
+        if (!user) return null;
+        const now = new Date();
+        const lastLogin = new Date(user.lastDailyLogin);
+        const isDifferentDay = now.getDate() !== lastLogin.getDate() || now.getMonth() !== lastLogin.getMonth() || now.getFullYear() !== lastLogin.getFullYear();
 
-    socket.on('roomJoined', (data) => {
-        currentRoomId = data.roomId;
-        myPlayerId = data.playerId;
-        switchScreen('lobby');
-        document.getElementById('lobby-code').innerText = data.roomId;
-        document.getElementById('lobby-chat-messages').innerHTML = '<div style="color:var(--accent-red); font-style:italic;">Entrou na sala.</div>';
-        
-        const ctrl = document.getElementById('host-controls');
-        const wait = document.getElementById('waiting-msg');
-        
-        if(data.isHost) { ctrl.style.display = 'block'; wait.style.display = 'none'; } 
-        else { ctrl.style.display = 'none'; wait.style.display = 'block'; }
-    });
-
-    socket.on('updatePlayerList', (players, maxPlayers) => {
-        const lobbyList = document.getElementById('player-list-lobby');
-        if (document.getElementById('player-count-badge')) {
-            const limit = maxPlayers || 10;
-            document.getElementById('player-count-badge').innerText = `${players.length}/${limit}`;
-        }
-        if (lobbyList) {
-            lobbyList.innerHTML = players.map(p => {
-                const hostBadge = p.isHost ? '<div class="host-badge">HOST</div>' : '';
-                const avatarUrl = p.avatar || 'https://cdn-icons-png.flaticon.com/512/847/847969.png'; 
-                return `<div class="player-card ${p.isHost?'is-host':''}"><img src="${avatarUrl}" alt="Avatar">${hostBadge}<span>${p.name}</span></div>`;
-            }).join('');
-        }
-        
-        const myData = players.find(p => p.id === socket.id);
-        const hostControls = document.getElementById('host-controls');
-        const waitingMsg = document.getElementById('waiting-msg');
-        
-        if (myData && myData.isHost) {
-            if(hostControls) hostControls.style.display = 'block';
-            if(waitingMsg) waitingMsg.style.display = 'none';
+        if (isDifferentDay) {
+            if (user.energy < 5) user.energy = 5;
+            user.lastDailyLogin = now;
+            await user.save();
         } else {
-            if(hostControls) hostControls.style.display = 'none';
-            if(waitingMsg) waitingMsg.style.display = 'block';
+            user.lastDailyLogin = now;
+            await user.save();
         }
-        updateGameScoreboard(players);
-    });
+        return user;
+    } catch (e) { return null; }
+}
 
-    socket.on('youAreHost', () => alert("Você é o novo anfitrião!"));
-    socket.on('returnToLobby', () => { isGameActive = false; isRoundSolved = false; switchScreen('lobby'); });
-    
-    socket.on('gameStarted', () => {
-        switchScreen('game');
-        createGrid();
-        chatInput.disabled = false;
-        document.getElementById('btn-send-chat').disabled = false;
-    });
+// === SOCKET LOGIC ===
+io.on('connection', async (socket) => {
+    const user = socket.request.user;
+    if(!user || io.engine.clientsCount > MAX_GLOBAL_PLAYERS) { socket.disconnect(); return; }
 
-    socket.on('newRound', (data) => {
-        resetRoundUI(data.roundNumber, data.totalRounds);
-        isGameActive = true;
-        isRoundSolved = false;
-    });
+    const dbUser = await checkDailyReset(user._id);
+    if (!dbUser) { socket.disconnect(); return; }
 
-    socket.on('timerUpdate', (time) => document.getElementById('timer').innerText = time);
+    console.log(`+1 Jogador: ${dbUser.username}`);
+    socket.emit('userDataUpdate', dbUser);
+    emitRoomList();
 
-    socket.on('guessResult', ({ guess, result }) => {
-        paintRow(currentRow, guess, result);
-        updateKeyboard(guess, result);
-        if (result.every(r => r === 'correct')) {
-            isRoundSolved = true;
-            showMessage("VOCÊ ACERTOU!", "#22c55e");
+    // --- FUNÇÃO DE SAÍDA / HERANÇA ---
+    async function handlePlayerExit(roomId, socketId) {
+        const room = rooms[roomId];
+        if (!room || !room.players[socketId]) return;
+
+        const player = room.players[socketId];
+        const wasHost = player.isHost;
+
+        // Desconta energia se saiu durante o jogo
+        if (room.state === 'PLAYING' || room.state === 'TIEBREAKER') {
+            await User.findByIdAndUpdate(player.dbId, { $inc: { energy: -1, gamesPlayed: 1 } });
+        }
+
+        delete room.players[socketId];
+        
+        // Se sala vazia, deleta.
+        if (Object.keys(room.players).length === 0) {
+            clearInterval(room.timer);
+            delete rooms[roomId];
+            emitRoomList();
         } else {
-            currentRow++;
-            currentTile = 0;
-            currentGuessArr = ["", "", "", "", ""];
-            updateActiveTile();
-            if (currentRow >= 6) {
-                isGameActive = false;
-                showMessage("FIM DAS TENTATIVAS", "#e11d48");
+            // Herança de Host
+            if (wasHost) {
+                const remainingIds = Object.keys(room.players);
+                const nextHostId = remainingIds[0];
+                room.players[nextHostId].isHost = true;
+                room.host = nextHostId;
+                io.to(nextHostId).emit('youAreHost'); 
+            }
+            emitPlayerUpdates(roomId);
+        }
+    }
+
+    socket.on('createRoom', async ({ isPublic, roomSize }) => {
+        if (Object.keys(rooms).length >= MAX_ROOMS) return socket.emit('error', 'Limite de salas.');
+        const u = await User.findById(user._id);
+        if (u.energy < 1) return socket.emit('error', 'Sem energia!');
+
+        // Validação do tamanho da sala
+        let limit = parseInt(roomSize);
+        if (isNaN(limit) || limit < 2) limit = 2;
+        if (limit > 20) limit = 20;
+
+        const roomId = generateRoomId();
+        rooms[roomId] = {
+            id: roomId, state: 'LOBBY', players: {}, host: socket.id,
+            currentRound: 0, currentWord: "", timer: null, timeLeft: 0,
+            solversCount: 0, isPublic: !!isPublic, 
+            maxPlayers: limit, // Define o limite escolhido
+            gameMode: 'default'
+        };
+        joinRoomLogic(socket, roomId, u, true);
+    });
+
+    socket.on('joinRoom', async ({ roomId }) => {
+        const u = await User.findById(user._id);
+        if (u.energy < 1) return socket.emit('error', 'Sem energia!');
+        const room = rooms[roomId];
+        // Permite entrar se estiver no LOBBY ou ENDED (para jogar novamente)
+        if (!room || (room.state !== 'LOBBY' && room.state !== 'ENDED') || Object.keys(room.players).length >= room.maxPlayers) return socket.emit('error', 'Erro ao entrar.');
+        joinRoomLogic(socket, roomId, u, false);
+    });
+
+    function joinRoomLogic(socket, roomId, dbUser, isHost) {
+        const room = rooms[roomId];
+        socket.join(roomId);
+        room.players[socket.id] = {
+            id: socket.id, dbId: dbUser._id, name: dbUser.username, avatar: dbUser.avatar,
+            roomId: roomId, isHost: isHost, score: 0, wins: 0, solvedRound: false, roundAttempts: 0
+        };
+        socket.emit('roomJoined', { roomId, isHost, playerId: socket.id });
+        emitPlayerUpdates(roomId);
+    }
+
+    socket.on('chatMessage', ({ roomId, msg }) => {
+        const room = rooms[roomId];
+        if(room && room.players[socket.id]) {
+            io.to(roomId).emit('chatMessage', { playerId: room.players[socket.id].dbId, playerName: room.players[socket.id].name, msg: msg.substring(0, 100) });
+        }
+    });
+
+    socket.on('startGame', ({ roomId, gameMode }) => {
+        const room = rooms[roomId];
+        if (!room || room.host !== socket.id) return;
+        if (Object.keys(room.players).length < 2) return socket.emit('error', 'Mínimo 2 jogadores.');
+        room.gameMode = gameMode; room.state = 'PLAYING';
+        io.to(roomId).emit('gameStarted', { gameMode });
+        emitRoomList();
+        startRound(roomId);
+    });
+
+    socket.on('submitGuess', async ({ roomId, guess }) => {
+        const room = rooms[roomId];
+        if (!room) return;
+        if (room.state !== 'PLAYING' && room.state !== 'TIEBREAKER') return;
+
+        const player = room.players[socket.id];
+        // Desempate: Só quem empatou joga
+        if (room.state === 'TIEBREAKER' && !room.tiedPlayersIds.includes(socket.id)) return;
+
+        if (player.solvedRound) return;
+        if (WORDS.length > 0 && !WORDS.includes(guess)) return;
+
+        player.roundAttempts++;
+        const result = calculateWordleResult(guess, room.currentWord);
+        const isCorrect = result.every(r => r === 'correct');
+
+        socket.emit('guessResult', { guess, result });
+
+        if (isCorrect) {
+            player.solvedRound = true; room.solversCount++;
+            let points = 0;
+
+            if (room.state === 'TIEBREAKER') {
+                player.score += 1;
+                io.to(roomId).emit('roundSuccess', `${player.name} É O GOAT SUPREMO!`);
+                endGameFinal(roomId);
+                return;
+            }
+
+            if (room.gameMode === 'competitive') {
+                points = Math.max(1, 11 - player.roundAttempts);
+                player.score += points;
+                User.findByIdAndUpdate(player.dbId, { $inc: { score: points } }).exec();
+                io.to(roomId).emit('roundSuccess', `${player.name} VENCEU A RODADA! (+${points})`);
+                emitPlayerUpdates(roomId);
+                clearInterval(room.timer);
+                io.to(roomId).emit('roundEnded', room.currentWord);
+                setTimeout(() => startRound(roomId), 5000);
+            } else {
+                points = Math.max(1, 11 - room.solversCount);
+                player.score += points;
+                User.findByIdAndUpdate(player.dbId, { $inc: { score: points } }).exec();
+                socket.emit('roundSuccess', `+${points} PONTOS!`);
+                emitPlayerUpdates(roomId);
+                if (Object.values(room.players).every(pl => pl.solvedRound)) room.timeLeft = 2;
             }
         }
     });
 
-    socket.on('roundSuccess', (msg) => setTimeout(() => showMessage(msg, "#22c55e"), 1500));
-    socket.on('roundEnded', (word) => { isGameActive = false; if(!isRoundSolved) showMessage(`PALAVRA: ${word}`, "#fff"); });
-
-    socket.on('gameOver', (players) => {
-        document.getElementById('tiebreaker-prep-modal').classList.add('hidden');
-        document.getElementById('tiebreaker-wait-modal').classList.add('hidden');
-        const overlay = document.getElementById('game-over-overlay');
-        players.sort((a,b) => b.score - a.score);
-        document.getElementById('game-over-title').innerHTML = `<span style="color:#eab308">${players[0].name}</span> É O GOAT 🐐`;
-        document.getElementById('final-results').innerHTML = players.map((p,i) => `<div style="margin:10px; font-size:1.2rem">${i===0?'👑':`#${i+1}`} <strong>${p.name}</strong>: ${p.score} pts</div>`).join('');
-        overlay.classList.remove('hidden');
+    socket.on('leaveMatch', async (roomId) => {
+        await handlePlayerExit(roomId, socket.id);
+        socket.leave(roomId);
+        socket.emit('matchLeft');
+        const updatedUser = await User.findById(user._id);
+        socket.emit('userDataUpdate', updatedUser);
     });
 
-    socket.on('tiebreakerAlert', (data) => {
-        isGameActive = false;
-        if (data.tiedPlayersIds.includes(socket.id)) {
-            const m = document.getElementById('tiebreaker-prep-modal'); m.classList.remove('hidden');
-            let c = 5; const el = document.getElementById('tiebreaker-countdown');
-            const i = setInterval(() => { c--; el.innerText = c; if(c<=0) { clearInterval(i); m.classList.add('hidden'); } }, 1000);
-        } else {
-            document.getElementById('tiebreaker-wait-modal').classList.remove('hidden');
+    socket.on('disconnect', async () => {
+        for (const rid in rooms) {
+            if (rooms[rid].players[socket.id]) {
+                await handlePlayerExit(rid, socket.id);
+                break;
+            }
         }
     });
+});
 
-    socket.on('tiebreakerRoundStarted', (data) => {
-        document.getElementById('tiebreaker-wait-modal').classList.add('hidden');
-        if (!data.tiedPlayersIds.includes(socket.id)) {
-            isGameActive = false;
-            showMessage("MORTE SÚBITA EM ANDAMENTO...", "#eab308");
-        } else {
-            isGameActive = true; isRoundSolved = false; resetRoundUI("EXTRA", "GOAT");
-            showMessage("ACERTE PRIMEIRO!", "#e11d48");
-        }
-    });
+function startRound(roomId) {
+    const room = rooms[roomId];
+    if(!room) return;
 
-    socket.on('userDataUpdate', (user) => updateUserDisplay(user));
-    socket.on('matchLeft', () => window.location.reload());
-    socket.on('connect_error', (err) => { if(err.message === "unauthorized") switchScreen('login'); });
-    socket.on('error', (msg) => alert(msg));
+    if (room.currentRound >= TOTAL_ROUNDS) { checkGameEnd(roomId); return; }
+
+    room.currentRound++;
+    room.currentWord = WORDS.length > 0 ? WORDS[Math.floor(Math.random() * WORDS.length)] : "TERMO";
+    room.timeLeft = ROUND_TIME; room.solversCount = 0;
+    Object.values(room.players).forEach(p => { p.solvedRound = false; p.roundAttempts = 0; });
     
-    socket.on('chatMessage', (data) => {
-        if (silencedPlayers.has(data.playerId)) return;
-        const gb = document.getElementById('chat-messages');
-        if (gb && document.getElementById('game-screen').classList.contains('active')) {
-            const d = document.createElement('div'); d.className = 'chat-usr-msg';
-            let m = data.playerId !== myPlayerId ? `<span class="material-icons mute-btn" onclick="toggleMute('${data.playerId}', this)">volume_up</span>` : '';
-            d.innerHTML = `${m} <span class="chat-name">${data.playerName}:</span> ${data.msg}`;
-            gb.appendChild(d); gb.scrollTop = gb.scrollHeight;
+    setupTimer(room);
+    io.to(roomId).emit('newRound', { roundNumber: room.currentRound, totalRounds: TOTAL_ROUNDS, gameMode: room.gameMode });
+}
+
+function setupTimer(room) {
+    clearInterval(room.timer);
+    room.timer = setInterval(() => {
+        room.timeLeft--;
+        io.to(room.id).emit('timerUpdate', room.timeLeft);
+        if (room.timeLeft <= 0) {
+            clearInterval(room.timer);
+            io.to(room.id).emit('roundEnded', room.currentWord);
+            if(room.state === 'TIEBREAKER') setTimeout(() => startTiebreaker(room.id), 5000);
+            else setTimeout(() => startRound(room.id), 5000);
         }
-        const lb = document.getElementById('lobby-chat-messages');
-        if (lb && document.getElementById('lobby-screen').classList.contains('active')) {
-            const d = document.createElement('div'); d.style.marginBottom = "4px";
-            d.innerHTML = `<strong style="color:#eab308">${data.playerName}:</strong> ${data.msg}`;
-            lb.appendChild(d); lb.scrollTop = lb.scrollHeight;
-        }
-    });
+    }, 1000);
 }
 
-// === NAVEGAÇÃO ===
-document.getElementById('btn-play-now').onclick = () => switchScreen('setup');
-document.getElementById('btn-back-dash').onclick = () => switchScreen('dashboard');
-document.getElementById('btn-leave-lobby').onclick = () => { if(confirm('Sair da sala?')) socket.emit('leaveMatch', currentRoomId); };
+function checkGameEnd(roomId) {
+    const room = rooms[roomId];
+    if(!room) return;
+    const players = Object.values(room.players).sort((a,b) => b.score - a.score);
 
-function switchScreen(name) {
-    Object.values(screens).forEach(s => s.classList.remove('active'));
-    if(screens[name]) screens[name].classList.add('active');
-}
-
-const roomSizeSlider = document.getElementById('room-size-slider');
-if (roomSizeSlider) {
-    roomSizeSlider.addEventListener('input', (e) => {
-        document.getElementById('player-limit-display').innerText = e.target.value;
-    });
-}
-
-// === PERFIL & RANKING (ATUALIZADO) ===
-document.getElementById('btn-view-profile').onclick = () => {
-    fetch('/api/me').then(r=>r.json()).then(user => {
-        document.getElementById('p-score').innerText = user.score || 0;
-        document.getElementById('p-wins').innerText = user.wins || 0;
-        document.getElementById('p-games').innerText = user.gamesPlayed || 0;
-        document.getElementById('profile-modal').classList.remove('hidden');
-    }).catch(console.error);
-};
-
-document.getElementById('btn-view-leaderboard').onclick = () => {
-    fetch('/api/leaderboard').then(r=>r.json()).then(players => {
-        const list = document.getElementById('global-leaderboard-list');
-        if(players.length === 0) {
-            list.innerHTML = '<li style="text-align:center;color:#888;">Sem dados.</li>';
-        } else {
-            list.innerHTML = players.map((p, i) => `
-                <li style="display:flex; justify-content:space-between; padding:8px;">
-                    <span>
-                        <strong style="color: #888; margin-right: 10px;">${i+1}.</strong>
-                        <img src="${p.avatar || 'https://cdn-icons-png.flaticon.com/512/847/847969.png'}" style="width:24px; border-radius:50%; vertical-align:middle; margin-right:5px;"> 
-                        ${p.username}
-                    </span>
-                    <strong style="color:#eab308">${p.score}</strong>
-                </li>`).join('');
-        }
-        document.getElementById('leaderboard-modal').classList.remove('hidden');
-    }).catch(console.error);
-};
-window.closeModals = () => document.querySelectorAll('.modal-overlay').forEach(el => el.classList.add('hidden'));
-
-document.getElementById('btn-create-room').onclick = () => {
-    const pub = document.getElementById('public-room-check').checked;
-    const size = document.getElementById('room-size-slider').value;
-    socket.emit('createRoom', { isPublic: pub, roomSize: size });
-};
-document.getElementById('btn-join-room').onclick = () => {
-    const code = document.getElementById('room-code-input').value;
-    if(code) socket.emit('joinRoom', { roomId: code });
-};
-document.getElementById('btn-start-game').onclick = () => {
-    const mode = document.querySelector('input[name="game-mode"]:checked').value;
-    socket.emit('startGame', { roomId: currentRoomId, gameMode: mode });
-};
-document.getElementById('btn-restart').onclick = () => { document.getElementById('game-over-overlay').classList.add('hidden'); switchScreen('lobby'); };
-
-// Chat
-const lobbyChatInput = document.getElementById('lobby-chat-input');
-const lobbyChatBtn = document.getElementById('btn-send-lobby-chat');
-chatToggleBtn.addEventListener('click', () => {
-    isChatVisible = !isChatVisible;
-    const icon = chatToggleBtn.querySelector('.material-icons');
-    if(isChatVisible) { chatContainer.style.display = 'flex'; icon.innerText = 'chat'; chatToggleBtn.style.opacity = '1'; }
-    else { chatContainer.style.display = 'none'; icon.innerText = 'chat_bubble_outline'; chatToggleBtn.style.opacity = '0.5'; }
-});
-window.toggleMute = (pid, btn) => {
-    if(pid===myPlayerId) return;
-    if(silencedPlayers.has(pid)) { silencedPlayers.delete(pid); btn.innerText='volume_up'; btn.style.color='#888'; }
-    else { silencedPlayers.add(pid); btn.innerText='volume_off'; btn.style.color='#e11d48'; }
-};
-function sendMsg(input) { const m = input.value.trim(); if(!m) return; socket.emit('chatMessage', { roomId: currentRoomId, msg: m }); input.value = ""; input.focus(); }
-document.getElementById('btn-send-chat').onclick = () => sendMsg(chatInput);
-chatInput.onkeypress = (e) => { if(e.key==='Enter') sendMsg(chatInput); };
-if(lobbyChatBtn) lobbyChatBtn.onclick = () => sendMsg(lobbyChatInput);
-if(lobbyChatInput) lobbyChatInput.onkeypress = (e) => { if(e.key==='Enter') sendMsg(lobbyChatInput); };
-
-// Leave Logic
-const confirmLeaveModal = document.getElementById('confirm-leave-overlay');
-document.getElementById('btn-leave-match').onclick = () => confirmLeaveModal.classList.remove('hidden');
-document.getElementById('btn-cancel-leave').onclick = () => confirmLeaveModal.classList.add('hidden');
-document.getElementById('btn-confirm-leave').onclick = () => { confirmLeaveModal.classList.add('hidden'); socket.emit('leaveMatch', currentRoomId); };
-
-// === GRID E TECLADO (COM CURSOR / SELECT) ===
-
-function createGrid() {
-    const grid = document.getElementById('grid');
-    grid.innerHTML = '';
-    for(let i=0; i<6; i++) {
-        const row = document.createElement('div');
-        row.className = 'grid-row';
-        for(let j=0; j<5; j++) {
-            const tile = document.createElement('div');
-            tile.className = 'tile';
-            tile.id = `tile-${i}-${j}`;
-            // CLICK TO SELECT (RESTAURADO)
-            tile.onclick = () => {
-                if (i === currentRow && isGameActive) {
-                    currentTile = j;
-                    updateActiveTile();
-                }
-            };
-            row.appendChild(tile);
-        }
-        grid.appendChild(row);
-    }
-    createKeyboard();
-    updateActiveTile();
-}
-
-function createKeyboard() {
-    const k = document.getElementById('keyboard');
-    k.innerHTML = `<div class="row">${'QWERTYUIOP'.split('').map(k=>`<button data-key="${k}">${k}</button>`).join('')}</div><div class="row">${'ASDFGHJKL'.split('').map(k=>`<button data-key="${k}">${k}</button>`).join('')}</div><div class="row"><button data-key="ENTER" class="wide-key action-btn">ENTER</button>${'ZXCVBNM'.split('').map(k=>`<button data-key="${k}">${k}</button>`).join('')}<button data-key="BACKSPACE" class="wide-key action-btn"><span class="material-icons">backspace</span></button></div>`;
-    document.querySelectorAll('#keyboard button').forEach(b => b.onclick = (e) => { e.preventDefault(); handleInput(b.dataset.key); });
-}
-
-function updateActiveTile() {
-    document.querySelectorAll('.tile').forEach(t => t.classList.remove('active-input'));
-    if (isGameActive && !isRoundSolved) {
-        const active = document.getElementById(`tile-${currentRow}-${currentTile}`);
-        if (active) active.classList.add('active-input');
+    if (players.length > 1 && players[0].score === players[1].score) {
+        room.state = 'TIEBREAKER';
+        const maxScore = players[0].score;
+        room.tiedPlayersIds = players.filter(p => p.score === maxScore).map(p => p.id);
+        io.to(roomId).emit('tiebreakerAlert', { tiedPlayersIds: room.tiedPlayersIds });
+        setTimeout(() => startTiebreaker(roomId), 5000);
+    } else {
+        endGameFinal(roomId);
     }
 }
 
-function resetRoundUI(r, t) {
-    currentRow = 0; currentTile = 0; currentGuessArr = ["", "", "", "", ""];
-    document.getElementById('round-display').innerText = `${r}/${t}`;
-    document.getElementById('message-area').style.opacity = '0';
-    document.querySelectorAll('.tile').forEach(e => { e.innerText = ''; e.className = 'tile'; e.style.animation = 'none'; e.classList.remove('correct','present','absent','filled','active-input'); });
-    createKeyboard();
-    updateActiveTile();
+function startTiebreaker(roomId) {
+    const room = rooms[roomId];
+    if(!room) return;
+    room.currentRound++; 
+    room.currentWord = WORDS.length > 0 ? WORDS[Math.floor(Math.random() * WORDS.length)] : "TERMO";
+    room.timeLeft = ROUND_TIME; room.solversCount = 0;
+    Object.values(room.players).forEach(p => { p.solvedRound = false; p.roundAttempts = 0; });
+    setupTimer(room);
+    io.to(roomId).emit('tiebreakerRoundStarted', { tiedPlayersIds: room.tiedPlayersIds });
 }
 
-function showMessage(m, c) {
-    const el = document.getElementById('message-area');
-    el.innerText = m; el.style.color = c; el.style.opacity = '1';
+async function endGameFinal(roomId) {
+    const room = rooms[roomId];
+    if(!room) return;
+    
+    // PERSISTÊNCIA DA SALA (Permite jogar novamente)
+    room.state = 'LOBBY';
+    room.currentRound = 0;
+    room.solversCount = 0;
+    room.tiedPlayersIds = [];
+    clearInterval(room.timer);
+
+    const players = Object.values(room.players).sort((a,b) => b.score - a.score);
+    if(players.length > 0) await User.findByIdAndUpdate(players[0].dbId, { $inc: { wins: 1 } });
+    
+    io.to(roomId).emit('gameOver', players);
+    
+    // Reseta status para a próxima
+    Object.values(room.players).forEach(p => { p.score = 0; p.solvedRound = false; p.roundAttempts = 0; });
+    
+    emitRoomList();
+    setTimeout(() => {
+        io.to(roomId).emit('returnToLobby');
+        emitPlayerUpdates(roomId); // Atualiza o lobby com os jogadores que ficaram
+    }, 5000);
 }
 
-function handleInput(key) {
-    if (!isGameActive || isRoundSolved) return;
-
-    if (key === 'ENTER') {
-        const guess = currentGuessArr.join('');
-        return submitGuess(guess);
-    }
-
-    if (key === 'BACKSPACE') {
-        if (currentGuessArr[currentTile] === "") {
-            if (currentTile > 0) currentTile--;
-        }
-        currentGuessArr[currentTile] = "";
-        const t = document.getElementById(`tile-${currentRow}-${currentTile}`);
-        t.innerText = "";
-        t.classList.remove('filled');
-        updateActiveTile();
-        return;
-    }
-
-    if (key === 'ARROWLEFT') {
-        if (currentTile > 0) currentTile--;
-        updateActiveTile();
-        return;
-    }
-
-    if (key === 'ARROWRIGHT') {
-        if (currentTile < 4) currentTile++;
-        updateActiveTile();
-        return;
-    }
-
-    if (key.length === 1 && /[A-Z]/.test(key)) {
-        currentGuessArr[currentTile] = key;
-        const t = document.getElementById(`tile-${currentRow}-${currentTile}`);
-        t.innerText = key;
-        t.classList.add('filled');
-        t.style.animation = "pop 0.1s";
-        if (currentTile < 4) currentTile++;
-        updateActiveTile();
-    }
+function calculateWordleResult(guess, target) {
+    const res = Array(5).fill('absent');
+    const targetArr = target.split(''); const guessArr = guess.split('');
+    const targetFreq = {};
+    targetArr.forEach(c => targetFreq[c] = (targetFreq[c] || 0) + 1);
+    guessArr.forEach((c, i) => { if (c === targetArr[i]) { res[i] = 'correct'; targetFreq[c]--; } });
+    guessArr.forEach((c, i) => { if (res[i] !== 'correct' && targetFreq[c] > 0) { res[i] = 'present'; targetFreq[c]--; } });
+    return res;
 }
 
-function submitGuess(guess) {
-    if (guess.length !== 5) { showMessage("Muito curta", "#eab308"); setTimeout(()=>document.getElementById('message-area').style.opacity='0', 1500); return; }
-    if (!CLIENT_WORDS.includes(guess)) { showMessage("Palavra inválida", "#e11d48"); setTimeout(()=>document.getElementById('message-area').style.opacity='0', 1500); return; }
-    socket.emit('submitGuess', { roomId: currentRoomId, guess: guess });
-}
-
-function paintRow(r, g, res) {
-    for(let i=0; i<5; i++) { const t = document.getElementById(`tile-${r}-${i}`); setTimeout(() => { t.classList.add(res[i]); t.style.animation = "pop 0.3s ease"; }, i*150); }
-}
-
-function updateKeyboard(g, res) {
-    for(let i=0; i<5; i++) {
-        const k = document.querySelector(`button[data-key="${g[i]}"]`);
-        if(k) {
-            if(res[i] === 'correct') k.className = 'correct';
-            else if(res[i] === 'present' && !k.classList.contains('correct')) k.className = 'present';
-            else if(res[i] === 'absent' && !k.classList.contains('correct') && !k.classList.contains('present')) k.className = 'absent';
-        }
-    }
-}
-
-function updateGameScoreboard(players) {
-    const list = document.getElementById('live-score-list');
-    if(!list) return;
-    players.sort((a,b) => b.score - a.score);
-    list.innerHTML = players.map((p,i) => {
-        const avatarUrl = p.avatar || 'https://cdn-icons-png.flaticon.com/512/847/847969.png';
-        return `<li><div style="display:flex;align-items:center;gap:8px"><span style="color:#888;font-size:0.8rem">#${i+1}</span><img src="${avatarUrl}" class="score-avatar"><span>${p.name}</span></div><span style="color:#eab308;font-weight:bold">${p.score}</span></li>`;
-    }).join('');
-}
-
-document.addEventListener('keydown', (e) => {
-    if (document.activeElement === chatInput || document.activeElement === lobbyChatInput) return;
-    let k = e.key.toUpperCase();
-    if(e.key === 'ArrowLeft') k = 'ARROWLEFT';
-    if(e.key === 'ArrowRight') k = 'ARROWRIGHT';
-    if(k==='ENTER'||k==='BACKSPACE'||k==='ARROWLEFT'||k==='ARROWRIGHT'||/^[A-Z]$/.test(k)) handleInput(k);
-});
+const PORT = process.env.PORT || 3000;
+server.listen(PORT, () => console.log(`Rodando na porta ${PORT}`));
