@@ -13,6 +13,8 @@
     <div id="login-screen" class="screen active">
         <div class="card login-card">
             <h1 class="logo">GOAT <span class="highlight">ROYALE</span></h1>
+            <p style="color:#ccc; margin-bottom:20px; font-size: 0.9rem;">A batalha de palavras definitiva.</p>
+            
             <a href="/auth/google" class="btn-google">
                 <img src="https://cdn-icons-png.flaticon.com/512/2991/2991148.png" alt="G" width="20">
                 Entrar com Google
@@ -20,7 +22,7 @@
         </div>
     </div>
 
-    <!-- 2. DASHBOARD -->
+    <!-- 2. TELA DE DASHBOARD -->
     <div id="dashboard-screen" class="screen">
         <header class="dashboard-header">
             <div class="user-profile-mini">
@@ -44,6 +46,7 @@
                     <button id="btn-view-leaderboard" class="btn-secondary">RANKING</button>
                 </div>
             </div>
+
             <div class="room-browser card">
                 <h4>SALAS PÚBLICAS</h4>
                 <div id="room-list-items">
@@ -53,7 +56,7 @@
         </div>
     </div>
 
-    <!-- 3. TELA DE SETUP -->
+    <!-- 3. TELA DE SETUP (CRIAR/ENTRAR) - CORRIGIDA -->
     <div id="lobby-setup-screen" class="screen">
         <div class="card login-card" style="max-width: 500px;">
             <div style="width: 100%; text-align: left; margin-bottom: 10px;">
@@ -61,27 +64,38 @@
                     <span class="material-icons">arrow_back</span> Voltar
                 </button>
             </div>
-            <h2>NOVA PARTIDA</h2>
+            
+            <h2 style="margin-bottom: 20px;">NOVA PARTIDA</h2>
+            
             <div class="setup-container">
+                <!-- Caixa de Criação -->
                 <div class="setup-box">
                     <div class="setup-title">CRIAR SALA</div>
                     
                     <div class="room-config">
+                        <!-- Toggle de Sala Pública -->
                         <label class="toggle-control">
-                            <input type="checkbox" id="public-room-check">
-                            <span class="slider"></span>
-                            <span class="toggle-label">Pública</span>
+                            <span class="toggle-switch">
+                                <input type="checkbox" id="public-room-check">
+                                <span class="slider"></span>
+                            </span>
+                            <span class="control-label">Sala Pública</span>
                         </label>
                         
+                        <!-- Slider de Jogadores -->
                         <div class="slider-container">
-                            <label>Jogadores: <span id="player-limit-display" style="color:var(--color-present); font-weight:bold;">10</span></label>
+                            <div style="display:flex; justify-content:space-between; width:100%; margin-bottom: 5px;">
+                                <span class="config-label" style="font-size:0.9rem; color:#ccc;">Max Jogadores</span>
+                                <span id="player-limit-display" style="color:var(--accent-red); font-weight:bold;">10</span>
+                            </div>
                             <input type="range" id="room-size-slider" min="2" max="20" value="10" class="range-input">
                         </div>
                     </div>
 
-                    <button id="btn-create-room" class="btn-primary" style="margin-top: 10px;">CRIAR SALA</button>
+                    <button id="btn-create-room" class="btn-primary" style="width:100%; margin-top:15px;">CRIAR SALA</button>
                 </div>
 
+                <!-- Caixa de Entrada -->
                 <div class="setup-box">
                     <div class="setup-title">ENTRAR COM CÓDIGO</div>
                     <div class="join-row">
@@ -93,17 +107,19 @@
         </div>
     </div>
 
-    <!-- 4. LOBBY -->
+    <!-- 4. TELA DE LOBBY (AGUARDANDO) -->
     <div id="lobby-screen" class="screen">
         <div class="card lobby-card" style="max-width: 600px;">
             <div class="lobby-header-actions">
-                <button id="btn-leave-lobby" style="background:none; border:none; color:#e11d48; cursor:pointer; font-weight:bold;">
+                <button id="btn-leave-lobby" style="background:none; border:none; color:#e11d48; cursor:pointer; font-weight:bold; display:flex; align-items:center; gap:5px;">
                     <span class="material-icons">arrow_back</span> SAIR
                 </button>
                 <span style="color:#666; font-size:0.8rem;">AGUARDANDO</span>
             </div>
+
             <h3 style="color: #888; font-size: 0.8rem; margin-top: 10px;">CÓDIGO DA SALA</h3>
             <div class="lobby-code-display" id="lobby-code" onclick="navigator.clipboard.writeText(this.innerText); alert('Copiado!')">...</div>
+
             <div class="list-container">
                 <div style="display: flex; justify-content: space-between; align-items: center;">
                     <h3>JOGADORES</h3>
@@ -112,11 +128,13 @@
                 <div id="player-list-lobby" class="player-grid"></div>
             </div>
             
+            <!-- CONTROLES DO HOST -->
             <div id="host-controls" style="display: none; margin-top: 15px; width: 100%; border-top: 1px solid #333; padding-top: 15px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 10px;">
                     <p style="font-size: 0.9rem; color: #ccc; margin:0;">SELECIONE O MODO:</p>
                     <button class="btn-icon-tiny" onclick="document.getElementById('gamemode-info-modal').classList.remove('hidden')">?</button>
                 </div>
+                
                 <div class="mode-selection-container">
                     <label class="mode-option">
                         <input type="radio" name="game-mode" value="default" checked>
@@ -131,17 +149,20 @@
             </div>
             
             <p id="waiting-msg" class="pulse" style="margin-top: 20px;">Aguardando o anfitrião...</p>
+
             <div class="lobby-chat-wrapper">
-                <div id="lobby-chat-messages" class="lobby-chat-messages"></div>
+                <div id="lobby-chat-messages" class="lobby-chat-messages">
+                    <div style="color:var(--accent-red); font-style:italic; padding: 5px;">Chat da Sala...</div>
+                </div>
                 <div class="lobby-chat-input-box">
-                    <input type="text" id="lobby-chat-input" placeholder="Digite aqui...">
+                    <input type="text" id="lobby-chat-input" placeholder="Digite aqui..." style="margin:0; font-size:0.9rem; padding:8px;">
                     <button id="btn-send-lobby-chat" class="btn-primary" style="width: 40px; padding: 0;"><span class="material-icons">send</span></button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 5. JOGO -->
+    <!-- 5. TELA DE JOGO -->
     <div id="game-screen" class="screen game-layout">
         <aside id="scoreboard-container">
             <div class="panel-header"><span class="material-icons">leaderboard</span> RANK</div>
@@ -154,19 +175,22 @@
                 <div class="badge timer-badge"><span class="material-icons">timer</span> <strong id="timer">45</strong></div>
                 <button id="btn-leave-match" class="btn-icon-danger" title="Sair"><span class="material-icons">logout</span></button>
             </header>
+            
             <div id="message-area"></div>
+            
             <div id="game-stage">
                 <div id="grid-container"><div id="grid"></div></div>
                 <div id="keyboard"></div>
             </div>
+            
             <div id="chat-and-controls-wrapper">
                 <div class="chat-controls-bar">
-                    <button id="btn-toggle-chat" class="btn-icon-small"><span class="material-icons">chat</span></button>
+                    <button id="btn-toggle-chat" class="btn-icon-small" title="Chat"><span class="material-icons">chat</span></button>
                 </div>
                 <div id="chat-container">
                     <div id="chat-messages"><div class="chat-sys-msg">Bem-vindo ao Chat!</div></div>
                     <div id="chat-input-wrapper">
-                        <input type="text" id="chat-input" placeholder="..." disabled>
+                        <input type="text" id="chat-input" placeholder="Converse aqui..." disabled>
                         <button id="btn-send-chat" disabled><span class="material-icons">send</span></button>
                     </div>
                 </div>
@@ -184,23 +208,23 @@
             <p style="text-align: left; line-height: 1.5; color: #ccc;">
                 • Você tem <strong>5 energias</strong> máximas.<br><br>
                 • Cada partida custa <strong>1 energia</strong>.<br><br>
-                • Sua energia recarrega para 5 automaticamente <strong>todo dia</strong>.
+                • Sua energia recarrega para 5 automaticamente <strong>todo dia</strong> (se você gastar).
             </p>
         </div>
     </div>
 
-    <!-- Info Modos -->
+    <!-- Info Modos de Jogo -->
     <div id="gamemode-info-modal" class="hidden modal-overlay">
         <div class="card modal-card">
             <button class="close-modal" onclick="document.getElementById('gamemode-info-modal').classList.add('hidden')">×</button>
             <h3>MODOS DE JOGO</h3>
             <div style="text-align: left; margin-bottom: 20px;">
                 <h4 style="color:var(--color-present); margin-bottom:5px;">⚔️ Battle Royale</h4>
-                <p style="color:#ccc; font-size:0.9rem;">Pontos por ordem de chegada.</p>
+                <p style="color:#ccc; font-size:0.9rem; line-height:1.4;">Pontuação por ordem de chegada. Todos jogam até o fim do tempo.</p>
             </div>
             <div style="text-align: left;">
                 <h4 style="color:var(--accent-red); margin-bottom:5px;">🏆 Competitivo</h4>
-                <p style="color:#ccc; font-size:0.9rem;">O PRIMEIRO a acertar encerra a rodada.</p>
+                <p style="color:#ccc; font-size:0.9rem; line-height:1.4;">O PRIMEIRO a acertar vence e encerra a rodada imediatamente.</p>
             </div>
         </div>
     </div>
@@ -218,7 +242,7 @@
         </div>
     </div>
 
-    <!-- Ranking -->
+    <!-- Ranking Global -->
     <div id="leaderboard-modal" class="hidden modal-overlay">
         <div class="card modal-card wide">
             <button class="close-modal" onclick="closeModals()">×</button>
@@ -248,9 +272,7 @@
         </div>
     </div>
 
-    <!-- === NOVOS MODAIS: DESEMPATE === -->
-    
-    <!-- Modal: Você está no desempate -->
+    <!-- Modais de Desempate -->
     <div id="tiebreaker-prep-modal" class="hidden modal-overlay" style="z-index: 4000;">
         <div class="card modal-card" style="border: 2px solid var(--color-present); box-shadow: 0 0 30px rgba(234, 179, 8, 0.5);">
             <h1 style="color:var(--color-present); font-size: 1.8rem; margin-bottom: 20px;">SÓ PODE HAVER UM GOAT</h1>
@@ -264,7 +286,6 @@
         </div>
     </div>
 
-    <!-- Modal: Esperando desempate (Espectador) -->
     <div id="tiebreaker-wait-modal" class="hidden modal-overlay" style="z-index: 3900;">
         <div class="card modal-card">
             <h3 style="color:var(--accent-red)">DESEMPATE EM ANDAMENTO</h3>
