@@ -3,10 +3,7 @@ const socket = io();
 // ===========================================
 // COLE A LISTA GIGANTE AQUI (CLIENT_WORDS)
 // ===========================================
-const CLIENT_WORDS = [
-    // ... COLE AQUI ...
-    "ABATA", "ABOCA" 
-];
+const CLIENT_WORDS = [ "ABATA", "ABOCA" ]; // Exemplo
 
 // Elementos
 const screens = {
@@ -23,27 +20,28 @@ const chatToggleBtn = document.getElementById('btn-toggle-chat');
 const chatContainer = document.getElementById('chat-container');
 
 // INICIALIZAÇÃO
-fetch('/api/me').then(r => { if (r.ok) return r.json(); throw new Error('Not logged'); })
-    .then(u => { updateUserDisplay(u); switchScreen('dashboard'); })
+fetch('/api/me')
+    .then(res => { if (res.ok) return res.json(); throw new Error('Not logged'); })
+    .then(user => { updateUserDisplay(user); switchScreen('dashboard'); })
     .catch(() => switchScreen('login'));
 
-function updateUserDisplay(u) {
-    document.getElementById('user-name').innerText = u.username;
-    document.getElementById('user-avatar').src = u.avatar;
-    document.getElementById('user-energy').innerText = u.energy;
+function updateUserDisplay(user) {
+    document.getElementById('user-name').innerText = user.username;
+    document.getElementById('user-avatar').src = user.avatar;
+    document.getElementById('user-energy').innerText = user.energy;
 }
 
 // NAVEGAÇÃO
 document.getElementById('btn-play-now').onclick = () => switchScreen('setup');
 document.getElementById('btn-back-dash').onclick = () => switchScreen('dashboard');
-document.getElementById('btn-leave-lobby').onclick = () => { if(confirm('Sair?')) socket.emit('leaveMatch', currentRoomId); };
+document.getElementById('btn-leave-lobby').onclick = () => { if(confirm('Sair da sala?')) socket.emit('leaveMatch', currentRoomId); };
 
 function switchScreen(name) {
     Object.values(screens).forEach(s => s.classList.remove('active'));
     if(screens[name]) screens[name].classList.add('active');
 }
 
-// SLIDER
+// Slider
 const roomSizeSlider = document.getElementById('room-size-slider');
 if (roomSizeSlider) roomSizeSlider.oninput = (e) => document.getElementById('player-limit-display').innerText = e.target.value;
 
@@ -82,7 +80,7 @@ socket.on('updateRoomList', (rooms) => {
     if(rooms.length===0) return c.innerHTML='<p style="text-align:center;color:#666;padding:10px">Nenhuma sala pública.</p>';
     rooms.forEach(r => {
         const el = document.createElement('div'); el.className='room-item';
-        el.innerHTML = `<div class="room-info"><strong>${r.hostName} <span class="room-badge">${r.gameMode==='competitive'?'🏆':'⚔️'}</span></strong><span>${r.playerCount}/${r.maxPlayers}</span></div><span class="material-icons" style="color:#666">arrow_forward_ios</span>`;
+        el.innerHTML = `<div class="room-info"><strong>${r.hostName}'s Room <span class="room-badge">${r.gameMode==='competitive'?'🏆':'⚔️'}</span></strong><span>${r.playerCount}/${r.maxPlayers}</span></div><span class="material-icons" style="color:#666">arrow_forward_ios</span>`;
         el.onclick = () => { document.getElementById('room-code-input').value = r.id; socket.emit('joinRoom', {roomId: r.id}); };
         c.appendChild(el);
     });
@@ -94,7 +92,7 @@ let currentRoomId = null, currentRow = 0, currentTile = 0, currentGuess = "", is
 socket.on('roomJoined', (data) => {
     currentRoomId = data.roomId; myPlayerId = data.playerId; switchScreen('lobby');
     document.getElementById('lobby-code').innerText = data.roomId;
-    document.getElementById('lobby-chat-messages').innerHTML = '';
+    document.getElementById('lobby-chat-messages').innerHTML = '<div style="color:var(--accent-red); font-style:italic;">Entrou na sala.</div>';
     const ctrl = document.getElementById('host-controls'), wait = document.getElementById('waiting-msg');
     if(data.isHost) { ctrl.style.display = 'block'; wait.style.display = 'none'; } else { ctrl.style.display = 'none'; wait.style.display = 'block'; }
 });
@@ -112,29 +110,17 @@ socket.on('updatePlayerList', (players) => {
 
 socket.on('youAreHost', () => alert("Você é o novo anfitrião!"));
 
-// === DESEMPATE ===
-socket.on('tiebreakerAlert', (data) => {
-    isGameActive = false;
-    if (data.tiedPlayersIds.includes(socket.id)) {
-        const m = document.getElementById('tiebreaker-prep-modal'); m.classList.remove('hidden');
-        let c = 5; const el = document.getElementById('tiebreaker-countdown');
-        const i = setInterval(() => { c--; el.innerText = c; if(c<=0) { clearInterval(i); m.classList.add('hidden'); } }, 1000);
-    } else {
-        document.getElementById('tiebreaker-wait-modal').classList.remove('hidden');
-    }
+// === LÓGICA DE RETORNO AO LOBBY (CORREÇÃO DE JOGAR NOVAMENTE) ===
+socket.on('returnToLobby', () => {
+    isGameActive = false; isRoundSolved = false;
+    switchScreen('lobby');
 });
 
-socket.on('tiebreakerRoundStarted', (data) => {
-    if (!data.tiedPlayersIds.includes(socket.id)) {
-        isGameActive = false;
-        document.getElementById('tiebreaker-wait-modal').classList.add('hidden');
-        showMessage("MORTE SÚBITA EM ANDAMENTO...", "#eab308");
-    } else {
-        isGameActive = true; isRoundSolved = false; resetRoundUI("EXTRA", "GOAT");
-        showMessage("ACERTE PRIMEIRO!", "#e11d48");
-    }
-    resetRoundUI("EXTRA", "GOAT");
-});
+// Botão de Restart fecha o modal (o servidor já moveu o jogador pro lobby logicamente)
+document.getElementById('btn-restart').onclick = () => {
+    document.getElementById('game-over-overlay').classList.add('hidden');
+    switchScreen('lobby');
+};
 
 // EVENTOS JOGO
 socket.on('gameStarted', () => { switchScreen('game'); createGrid(); document.getElementById('chat-input').disabled = false; });
@@ -147,29 +133,52 @@ socket.on('guessResult', ({ guess, result }) => {
 });
 socket.on('roundSuccess', (msg) => setTimeout(() => showMessage(msg, "#22c55e"), 1500));
 socket.on('roundEnded', (w) => { isGameActive = false; if(!isRoundSolved) showMessage(`PALAVRA: ${w}`, "#fff"); });
+
+// === GAME OVER & DESEMPATE ===
 socket.on('gameOver', (players) => {
+    // Esconde modais de desempate se estiverem abertos
     document.getElementById('tiebreaker-prep-modal').classList.add('hidden');
     document.getElementById('tiebreaker-wait-modal').classList.add('hidden');
+    
+    const overlay = document.getElementById('game-over-overlay');
     players.sort((a,b) => b.score - a.score);
     document.getElementById('game-over-title').innerHTML = `<span style="color:#eab308">${players[0].name}</span> É O GOAT 🐐`;
-    document.getElementById('final-results').innerHTML = players.map((p,i) => `<div style="margin:10px;font-size:1.2rem">${i===0?'👑':`#${i+1}`} <strong>${p.name}</strong>: ${p.score}</div>`).join('');
-    document.getElementById('game-over-overlay').classList.remove('hidden');
+    document.getElementById('final-results').innerHTML = players.map((p,i) => `<div style="margin:10px; font-size:1.2rem">${i===0?'👑':`#${i+1}`} <strong>${p.name}</strong>: ${p.score} pts</div>`).join('');
+    overlay.classList.remove('hidden');
 });
 
-// UTILS & CHAT
-const lobbyChatInput = document.getElementById('lobby-chat-input');
-const gameChatInput = document.getElementById('chat-input');
-let silenced = new Set();
+socket.on('tiebreakerAlert', (data) => {
+    isGameActive = false;
+    if (data.tiedPlayersIds.includes(socket.id)) {
+        const m = document.getElementById('tiebreaker-prep-modal'); m.classList.remove('hidden');
+        let c = 5; const el = document.getElementById('tiebreaker-countdown');
+        const i = setInterval(() => { c--; el.innerText = c; if(c<=0) { clearInterval(i); m.classList.add('hidden'); } }, 1000);
+    } else {
+        document.getElementById('tiebreaker-wait-modal').classList.remove('hidden');
+    }
+});
 
+socket.on('tiebreakerRoundStarted', (data) => {
+    document.getElementById('tiebreaker-wait-modal').classList.add('hidden');
+    if (!data.tiedPlayersIds.includes(socket.id)) {
+        isGameActive = false;
+        showMessage("MORTE SÚBITA EM ANDAMENTO...", "#eab308");
+    } else {
+        isGameActive = true; isRoundSolved = false; resetRoundUI("EXTRA", "GOAT");
+        showMessage("ACERTE PRIMEIRO!", "#e11d48");
+    }
+    resetRoundUI("EXTRA", "GOAT"); // Reseta para todos verem
+});
+
+// CHAT & UTILS
+let silenced = new Set();
 window.toggleMute = (pid, btn) => {
     if(pid===myPlayerId) return;
     if(silenced.has(pid)) { silenced.delete(pid); btn.innerText='volume_up'; btn.style.color='#888'; }
     else { silenced.add(pid); btn.innerText='volume_off'; btn.style.color='#e11d48'; }
 };
-
 socket.on('chatMessage', (data) => {
     if (silenced.has(data.playerId)) return;
-    // Game Chat
     const gb = document.getElementById('chat-messages');
     if (gb && document.getElementById('game-screen').classList.contains('active')) {
         const d = document.createElement('div'); d.className = 'chat-usr-msg';
@@ -177,7 +186,6 @@ socket.on('chatMessage', (data) => {
         d.innerHTML = `${m} <span class="chat-name">${data.playerName}:</span> ${data.msg}`;
         gb.appendChild(d); gb.scrollTop = gb.scrollHeight;
     }
-    // Lobby Chat
     const lb = document.getElementById('lobby-chat-messages');
     if (lb && document.getElementById('lobby-screen').classList.contains('active')) {
         const d = document.createElement('div'); d.style.marginBottom = "4px";
@@ -185,13 +193,11 @@ socket.on('chatMessage', (data) => {
         lb.appendChild(d); lb.scrollTop = lb.scrollHeight;
     }
 });
-
 function sendMsg(input) { const m = input.value.trim(); if(!m) return; socket.emit('chatMessage', { roomId: currentRoomId, msg: m }); input.value = ""; input.focus(); }
-document.getElementById('btn-send-chat').onclick = () => sendMsg(gameChatInput);
-gameChatInput.onkeypress = (e) => { if(e.key==='Enter') sendMsg(gameChatInput); };
+document.getElementById('btn-send-chat').onclick = () => sendMsg(chatInput);
+chatInput.onkeypress = (e) => { if(e.key==='Enter') sendMsg(chatInput); };
 if(document.getElementById('btn-send-lobby-chat')) document.getElementById('btn-send-lobby-chat').onclick = () => sendMsg(lobbyChatInput);
 if(lobbyChatInput) lobbyChatInput.onkeypress = (e) => { if(e.key==='Enter') sendMsg(lobbyChatInput); };
-
 chatToggleBtn.addEventListener('click', () => {
     const c = document.getElementById('chat-container');
     const v = c.style.display !== 'none';
@@ -219,5 +225,5 @@ function handleInput(k) { if (!isGameActive || isRoundSolved) return; if (k === 
 function submitGuess() { if (currentGuess.length !== 5) { showMessage("Muito curta", "#eab308"); setTimeout(()=>document.getElementById('message-area').style.opacity='0', 1500); return; } if (!CLIENT_WORDS.includes(currentGuess)) { showMessage("Palavra inválida", "#e11d48"); setTimeout(()=>document.getElementById('message-area').style.opacity='0', 1500); return; } socket.emit('submitGuess', { roomId: currentRoomId, guess: currentGuess }); }
 function paintRow(r, g, res) { for(let i=0; i<5; i++) { const t = document.getElementById(`tile-${r}-${i}`); setTimeout(() => { t.classList.add(res[i]); t.style.animation = "pop 0.3s ease"; }, i*150); } }
 function updateKeyboard(g, res) { for(let i=0; i<5; i++) { const k = document.querySelector(`button[data-key="${g[i]}"]`); if(k) { if(res[i] === 'correct') k.className = 'correct'; else if(res[i] === 'present' && !k.classList.contains('correct')) k.className = 'present'; else if(res[i] === 'absent' && !k.classList.contains('correct') && !k.classList.contains('present')) k.className = 'absent'; } } }
-function updateGameScoreboard(players) { const list = document.getElementById('live-score-list'); if(!list) return; players.sort((a,b) => b.score - a.score); list.innerHTML = players.map((p,i) => `<li><div style="display:flex;align-items:center;gap:8px"><span style="color:#888;font-size:0.8rem">#${i+1}</span><img src="${p.avatar||'https://cdn-icons-png.flaticon.com/512/847/847969.png'}" class="score-avatar"><span>${p.name}</span></div><span style="color:#eab308;font-weight:bold">${p.score}</span></li>`).join(''); }
+function updateGameScoreboard(players) { const list = document.getElementById('live-score-list'); if(!list) return; players.sort((a,b) => b.score - a.score); list.innerHTML = players.map((p,i) => {const avatarUrl = p.avatar || 'https://cdn-icons-png.flaticon.com/512/847/847969.png'; return `<li><div style="display:flex;align-items:center;gap:8px"><span style="color:#888;font-size:0.8rem">#${i+1}</span><img src="${avatarUrl}" class="score-avatar"><span>${p.name}</span></div><span style="color:#eab308;font-weight:bold">${p.score}</span></li>`}).join(''); }
 document.addEventListener('keydown', (e) => { if (document.activeElement === chatInput || document.activeElement === lobbyChatInput) return; const k = e.key.toUpperCase(); if(k==='ENTER'||k==='BACKSPACE'||/^[A-Z]$/.test(k)) handleInput(k); });
