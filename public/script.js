@@ -222,6 +222,37 @@ if (roomSizeSlider) {
     });
 }
 
+// === PERFIL & RANKING (ATUALIZADO) ===
+document.getElementById('btn-view-profile').onclick = () => {
+    fetch('/api/me').then(r=>r.json()).then(user => {
+        document.getElementById('p-score').innerText = user.score || 0;
+        document.getElementById('p-wins').innerText = user.wins || 0;
+        document.getElementById('p-games').innerText = user.gamesPlayed || 0;
+        document.getElementById('profile-modal').classList.remove('hidden');
+    }).catch(console.error);
+};
+
+document.getElementById('btn-view-leaderboard').onclick = () => {
+    fetch('/api/leaderboard').then(r=>r.json()).then(players => {
+        const list = document.getElementById('global-leaderboard-list');
+        if(players.length === 0) {
+            list.innerHTML = '<li style="text-align:center;color:#888;">Sem dados.</li>';
+        } else {
+            list.innerHTML = players.map((p, i) => `
+                <li style="display:flex; justify-content:space-between; padding:8px;">
+                    <span>
+                        <strong style="color: #888; margin-right: 10px;">${i+1}.</strong>
+                        <img src="${p.avatar || 'https://cdn-icons-png.flaticon.com/512/847/847969.png'}" style="width:24px; border-radius:50%; vertical-align:middle; margin-right:5px;"> 
+                        ${p.username}
+                    </span>
+                    <strong style="color:#eab308">${p.score}</strong>
+                </li>`).join('');
+        }
+        document.getElementById('leaderboard-modal').classList.remove('hidden');
+    }).catch(console.error);
+};
+window.closeModals = () => document.querySelectorAll('.modal-overlay').forEach(el => el.classList.add('hidden'));
+
 document.getElementById('btn-create-room').onclick = () => {
     const pub = document.getElementById('public-room-check').checked;
     const size = document.getElementById('room-size-slider').value;

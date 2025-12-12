@@ -49,6 +49,7 @@ body {
 .setup-title { font-size: 0.8rem; color: #888; text-transform: uppercase; margin-bottom: 15px; letter-spacing: 1px; text-align: left; }
 
 .config-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.config-row.vertical { flex-direction: column; align-items: flex-start; gap: 10px; }
 .config-label { color: #ccc; font-size: 0.95rem; }
 
 /* Toggle Switch */
@@ -119,14 +120,14 @@ input:focus { border-color: var(--accent-red); }
 #grid { display: grid; grid-template-rows: repeat(6, 1fr); gap: 8px; width: 100%; max-width: 380px; aspect-ratio: 5/6; margin-bottom: 20px; flex-shrink: 0;}
 .grid-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
 
-/* === TILES COM CURSOR === */
+/* TILES COM CURSOR */
 .tile { 
     font-size: 2rem; border: 2px solid var(--tile-border); 
     display: flex; justify-content: center; align-items: center; 
     font-weight: bold; text-transform: uppercase; 
     cursor: pointer; transition: all 0.1s;
 }
-/* OBRIGATÓRIO PARA O MODO "CURSOR" */
+/* OBRIGATÓRIO PARA O CURSOR FUNCIONAR VISUALMENTE */
 .tile.active-input {
     border-color: var(--color-present) !important;
     box-shadow: 0 0 10px rgba(234, 179, 8, 0.3);
@@ -134,7 +135,6 @@ input:focus { border-color: var(--accent-red); }
     transform: scale(1.05);
     z-index: 10;
 }
-
 .tile.filled { border-color: var(--tile-filled); animation: pop 0.1s; }
 .tile.correct { background: var(--color-correct); border: none; }
 .tile.present { background: var(--color-present); border: none; }
@@ -175,6 +175,23 @@ input:focus { border-color: var(--accent-red); }
 .modal-actions button { flex: 1; padding: 10px; }
 .wide { max-width: 500px; height: 80%; }
 .hidden { display: none !important; }
+
+/* === ESTILOS DO PERFIL E RANKING (CORRIGIDO) === */
+.styled-list {
+    list-style: none; padding: 0; margin-top: 15px;
+    max-height: 400px; overflow-y: auto; width: 100%;
+}
+.styled-list li {
+    background: rgba(255, 255, 255, 0.05); margin-bottom: 8px; padding: 12px;
+    border-radius: 6px; display: flex; justify-content: space-between; align-items: center;
+    border-left: 3px solid transparent;
+}
+.styled-list li:nth-child(1) { border-left-color: #ffd700; background: rgba(255, 215, 0, 0.1); }
+.styled-list li:nth-child(2) { border-left-color: #c0c0c0; }
+.styled-list li:nth-child(3) { border-left-color: #cd7f32; }
+
+.profile-stats { display: flex; flex-direction: column; gap: 15px; margin-top: 15px; }
+.stat-item { display: flex; justify-content: space-between; font-size: 1.1rem; padding-bottom: 5px; border-bottom: 1px solid #333; }
 
 /* Mobile */
 @media (max-width: 768px) {
