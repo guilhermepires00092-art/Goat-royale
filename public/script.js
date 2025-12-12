@@ -1,11 +1,8 @@
-const socket = io();
+let socket; 
+let myPlayerId = null;
 
-// ===========================================
-// COLE SUA LISTA CLIENT_WORDS AQUI
-// ===========================================
 const CLIENT_WORDS = [
-    // ... COLE SUAS PALAVRAS AQUI ...
-    "ABATA", "ABOCA"
+    "ABATA", "ABOCA" // MESMA LISTA DO SERVER
 ];
 
 // Elementos Globais
@@ -22,18 +19,17 @@ const chatInput = document.getElementById('chat-input');
 const chatToggleBtn = document.getElementById('btn-toggle-chat'); 
 const chatContainer = document.getElementById('chat-container');
 
-// ESTADO DO JOGO ATUALIZADO
+// ESTADO DO JOGO COM CURSOR
 let currentRoomId = null;
 let currentRow = 0;
 let currentTile = 0; // Índice do cursor (0 a 4)
-let currentGuessArr = ["", "", "", "", ""]; // Array de letras
+let currentGuessArr = ["", "", "", "", ""]; 
 let isGameActive = false;
 let isRoundSolved = false;
-let myPlayerId = null;
 let silencedPlayers = new Set();
 let isChatVisible = true;
 
-// === INICIALIZAÇÃO ===
+// === 1. INICIALIZAÇÃO ===
 fetch('/api/me')
     .then(res => {
         if (res.ok) return res.json();
@@ -41,9 +37,12 @@ fetch('/api/me')
     })
     .then(user => {
         updateUserDisplay(user);
+        initializeSocket();
         switchScreen('dashboard');
     })
-    .catch(() => switchScreen('login'));
+    .catch(() => {
+        switchScreen('login');
+    });
 
 function updateUserDisplay(user) {
     document.getElementById('user-name').innerText = user.username;
@@ -51,12 +50,165 @@ function updateUserDisplay(user) {
     document.getElementById('user-energy').innerText = user.energy;
 }
 
+// === 2. SOCKET ===
+function initializeSocket() {
+    socket = io();
+
+    socket.on('updateRoomList', (rooms) => {
+        const container = document.getElementById('room-list-items');
+        if (!container) return;
+        container.innerHTML = '';
+        if (rooms.length === 0) return container.innerHTML = '<p style="text-align:center; color:#666; font-size:0.9rem;">Nenhuma sala pública.</p>';
+        rooms.forEach(r => {
+            const el = document.createElement('div');
+            el.className = 'room-item';
+            const modeBadge = r.gameMode === 'competitive' ? '🏆' : '⚔️';
+            el.innerHTML = `<div class="room-info"><strong>${r.hostName}'s Room <span class="room-badge">${modeBadge}</span></strong><span>${r.playerCount} / ${r.maxPlayers} Jogadores</span></div><span class="material-icons" style="color:#666; font-size:1rem;">arrow_forward_ios</span>`;
+            el.onclick = () => { document.getElementById('room-code-input').value = r.id; socket.emit('joinRoom', { roomId: r.id }); };
+            container.appendChild(el);
+        });
+    });
+
+    socket.on('roomJoined', (data) => {
+        currentRoomId = data.roomId;
+        myPlayerId = data.playerId;
+        switchScreen('lobby');
+        document.getElementById('lobby-code').innerText = data.roomId;
+        document.getElementById('lobby-chat-messages').innerHTML = '<div style="color:var(--accent-red); font-style:italic;">Entrou na sala.</div>';
+        
+        const ctrl = document.getElementById('host-controls');
+        const wait = document.getElementById('waiting-msg');
+        
+        if(data.isHost) { ctrl.style.display = 'block'; wait.style.display = 'none'; } 
+        else { ctrl.style.display = 'none'; wait.style.display = 'block'; }
+    });
+
+    socket.on('updatePlayerList', (players, maxPlayers) => {
+        const lobbyList = document.getElementById('player-list-lobby');
+        if (document.getElementById('player-count-badge')) {
+            const limit = maxPlayers || 10;
+            document.getElementById('player-count-badge').innerText = `${players.length}/${limit}`;
+        }
+        if (lobbyList) {
+            lobbyList.innerHTML = players.map(p => {
+                const hostBadge = p.isHost ? '<div class="host-badge">HOST</div>' : '';
+                const avatarUrl = p.avatar || 'https://cdn-icons-png.flaticon.com/512/847/847969.png'; 
+                return `<div class="player-card ${p.isHost?'is-host':''}"><img src="${avatarUrl}" alt="Avatar">${hostBadge}<span>${p.name}</span></div>`;
+            }).join('');
+        }
+        
+        const myData = players.find(p => p.id === socket.id);
+        const hostControls = document.getElementById('host-controls');
+        const waitingMsg = document.getElementById('waiting-msg');
+        
+        if (myData && myData.isHost) {
+            if(hostControls) hostControls.style.display = 'block';
+            if(waitingMsg) waitingMsg.style.display = 'none';
+        } else {
+            if(hostControls) hostControls.style.display = 'none';
+            if(waitingMsg) waitingMsg.style.display = 'block';
+        }
+        updateGameScoreboard(players);
+    });
+
+    socket.on('youAreHost', () => alert("Você é o novo anfitrião!"));
+    socket.on('returnToLobby', () => { isGameActive = false; isRoundSolved = false; switchScreen('lobby'); });
+    
+    socket.on('gameStarted', () => {
+        switchScreen('game');
+        createGrid();
+        chatInput.disabled = false;
+        document.getElementById('btn-send-chat').disabled = false;
+    });
+
+    socket.on('newRound', (data) => {
+        resetRoundUI(data.roundNumber, data.totalRounds);
+        isGameActive = true;
+        isRoundSolved = false;
+    });
+
+    socket.on('timerUpdate', (time) => document.getElementById('timer').innerText = time);
+
+    socket.on('guessResult', ({ guess, result }) => {
+        paintRow(currentRow, guess, result);
+        updateKeyboard(guess, result);
+        if (result.every(r => r === 'correct')) {
+            isRoundSolved = true;
+            showMessage("VOCÊ ACERTOU!", "#22c55e");
+        } else {
+            currentRow++;
+            currentTile = 0;
+            currentGuessArr = ["", "", "", "", ""];
+            updateActiveTile();
+            if (currentRow >= 6) {
+                isGameActive = false;
+                showMessage("FIM DAS TENTATIVAS", "#e11d48");
+            }
+        }
+    });
+
+    socket.on('roundSuccess', (msg) => setTimeout(() => showMessage(msg, "#22c55e"), 1500));
+    socket.on('roundEnded', (word) => { isGameActive = false; if(!isRoundSolved) showMessage(`PALAVRA: ${word}`, "#fff"); });
+
+    socket.on('gameOver', (players) => {
+        document.getElementById('tiebreaker-prep-modal').classList.add('hidden');
+        document.getElementById('tiebreaker-wait-modal').classList.add('hidden');
+        const overlay = document.getElementById('game-over-overlay');
+        players.sort((a,b) => b.score - a.score);
+        document.getElementById('game-over-title').innerHTML = `<span style="color:#eab308">${players[0].name}</span> É O GOAT 🐐`;
+        document.getElementById('final-results').innerHTML = players.map((p,i) => `<div style="margin:10px; font-size:1.2rem">${i===0?'👑':`#${i+1}`} <strong>${p.name}</strong>: ${p.score} pts</div>`).join('');
+        overlay.classList.remove('hidden');
+    });
+
+    socket.on('tiebreakerAlert', (data) => {
+        isGameActive = false;
+        if (data.tiedPlayersIds.includes(socket.id)) {
+            const m = document.getElementById('tiebreaker-prep-modal'); m.classList.remove('hidden');
+            let c = 5; const el = document.getElementById('tiebreaker-countdown');
+            const i = setInterval(() => { c--; el.innerText = c; if(c<=0) { clearInterval(i); m.classList.add('hidden'); } }, 1000);
+        } else {
+            document.getElementById('tiebreaker-wait-modal').classList.remove('hidden');
+        }
+    });
+
+    socket.on('tiebreakerRoundStarted', (data) => {
+        document.getElementById('tiebreaker-wait-modal').classList.add('hidden');
+        if (!data.tiedPlayersIds.includes(socket.id)) {
+            isGameActive = false;
+            showMessage("MORTE SÚBITA EM ANDAMENTO...", "#eab308");
+        } else {
+            isGameActive = true; isRoundSolved = false; resetRoundUI("EXTRA", "GOAT");
+            showMessage("ACERTE PRIMEIRO!", "#e11d48");
+        }
+    });
+
+    socket.on('userDataUpdate', (user) => updateUserDisplay(user));
+    socket.on('matchLeft', () => window.location.reload());
+    socket.on('connect_error', (err) => { if(err.message === "unauthorized") switchScreen('login'); });
+    socket.on('error', (msg) => alert(msg));
+    
+    socket.on('chatMessage', (data) => {
+        if (silencedPlayers.has(data.playerId)) return;
+        const gb = document.getElementById('chat-messages');
+        if (gb && document.getElementById('game-screen').classList.contains('active')) {
+            const d = document.createElement('div'); d.className = 'chat-usr-msg';
+            let m = data.playerId !== myPlayerId ? `<span class="material-icons mute-btn" onclick="toggleMute('${data.playerId}', this)">volume_up</span>` : '';
+            d.innerHTML = `${m} <span class="chat-name">${data.playerName}:</span> ${data.msg}`;
+            gb.appendChild(d); gb.scrollTop = gb.scrollHeight;
+        }
+        const lb = document.getElementById('lobby-chat-messages');
+        if (lb && document.getElementById('lobby-screen').classList.contains('active')) {
+            const d = document.createElement('div'); d.style.marginBottom = "4px";
+            d.innerHTML = `<strong style="color:#eab308">${data.playerName}:</strong> ${data.msg}`;
+            lb.appendChild(d); lb.scrollTop = lb.scrollHeight;
+        }
+    });
+}
+
 // === NAVEGAÇÃO ===
 document.getElementById('btn-play-now').onclick = () => switchScreen('setup');
 document.getElementById('btn-back-dash').onclick = () => switchScreen('dashboard');
-document.getElementById('btn-leave-lobby').onclick = () => {
-    if(confirm('Sair da sala?')) socket.emit('leaveMatch', currentRoomId);
-};
+document.getElementById('btn-leave-lobby').onclick = () => { if(confirm('Sair da sala?')) socket.emit('leaveMatch', currentRoomId); };
 
 function switchScreen(name) {
     Object.values(screens).forEach(s => s.classList.remove('active'));
@@ -70,29 +222,6 @@ if (roomSizeSlider) {
     });
 }
 
-// === PERFIL & RANKING ===
-document.getElementById('btn-view-profile').onclick = () => {
-    fetch('/api/me').then(r=>r.json()).then(user => {
-        document.getElementById('p-score').innerText = user.score;
-        document.getElementById('p-wins').innerText = user.wins;
-        document.getElementById('p-games').innerText = user.gamesPlayed;
-        document.getElementById('profile-modal').classList.remove('hidden');
-    });
-};
-document.getElementById('btn-view-leaderboard').onclick = () => {
-    fetch('/api/leaderboard').then(r=>r.json()).then(players => {
-        const list = document.getElementById('global-leaderboard-list');
-        list.innerHTML = players.map((p, i) => `
-            <li style="display:flex; justify-content:space-between; padding:8px;">
-                <span>${i+1}. <img src="${p.avatar}" style="width:20px; border-radius:50%; vertical-align:middle"> ${p.username}</span>
-                <strong>${p.score}</strong>
-            </li>`).join('');
-        document.getElementById('leaderboard-modal').classList.remove('hidden');
-    });
-};
-window.closeModals = () => document.querySelectorAll('.modal-overlay').forEach(el => el.classList.add('hidden'));
-
-// === JOGO E SOCKETS ===
 document.getElementById('btn-create-room').onclick = () => {
     const pub = document.getElementById('public-room-check').checked;
     const size = document.getElementById('room-size-slider').value;
@@ -106,139 +235,9 @@ document.getElementById('btn-start-game').onclick = () => {
     const mode = document.querySelector('input[name="game-mode"]:checked').value;
     socket.emit('startGame', { roomId: currentRoomId, gameMode: mode });
 };
-
-socket.on('updateRoomList', (rooms) => {
-    const container = document.getElementById('room-list-items');
-    if (!container) return;
-    container.innerHTML = '';
-    if (rooms.length === 0) return container.innerHTML = '<p style="text-align:center; color:#666; font-size:0.9rem;">Nenhuma sala pública.</p>';
-    rooms.forEach(r => {
-        const el = document.createElement('div');
-        el.className = 'room-item';
-        const modeBadge = r.gameMode === 'competitive' ? '🏆' : '⚔️';
-        el.innerHTML = `<div class="room-info"><strong>${r.hostName}'s Room <span class="room-badge">${modeBadge}</span></strong><span>${r.playerCount} / ${r.maxPlayers} Jogadores</span></div><span class="material-icons" style="color:#666; font-size:1rem;">arrow_forward_ios</span>`;
-        el.onclick = () => { document.getElementById('room-code-input').value = r.id; socket.emit('joinRoom', { roomId: r.id }); };
-        container.appendChild(el);
-    });
-});
-
-socket.on('roomJoined', (data) => {
-    currentRoomId = data.roomId;
-    myPlayerId = data.playerId;
-    switchScreen('lobby');
-    document.getElementById('lobby-code').innerText = data.roomId;
-    document.getElementById('lobby-chat-messages').innerHTML = '<div style="color:var(--accent-red); font-style:italic;">Entrou na sala.</div>';
-    
-    const ctrl = document.getElementById('host-controls');
-    const wait = document.getElementById('waiting-msg');
-    
-    if(data.isHost) { ctrl.style.display = 'block'; wait.style.display = 'none'; } 
-    else { ctrl.style.display = 'none'; wait.style.display = 'block'; }
-});
-
-socket.on('updatePlayerList', (players, maxPlayers) => {
-    const lobbyList = document.getElementById('player-list-lobby');
-    if (document.getElementById('player-count-badge')) {
-        const limit = maxPlayers || 10;
-        document.getElementById('player-count-badge').innerText = `${players.length}/${limit}`;
-    }
-    if (lobbyList) {
-        lobbyList.innerHTML = players.map(p => {
-            const hostBadge = p.isHost ? '<div class="host-badge">HOST</div>' : '';
-            const avatarUrl = p.avatar || 'https://cdn-icons-png.flaticon.com/512/847/847969.png'; 
-            return `<div class="player-card ${p.isHost?'is-host':''}"><img src="${avatarUrl}" alt="Avatar">${hostBadge}<span>${p.name}</span></div>`;
-        }).join('');
-    }
-    
-    const myData = players.find(p => p.id === socket.id);
-    const hostControls = document.getElementById('host-controls');
-    const waitingMsg = document.getElementById('waiting-msg');
-    
-    if (myData && myData.isHost) {
-        if(hostControls) hostControls.style.display = 'block';
-        if(waitingMsg) waitingMsg.style.display = 'none';
-    } else {
-        if(hostControls) hostControls.style.display = 'none';
-        if(waitingMsg) waitingMsg.style.display = 'block';
-    }
-    updateGameScoreboard(players);
-});
-
-socket.on('youAreHost', () => alert("Você é o novo anfitrião!"));
-socket.on('returnToLobby', () => { isGameActive = false; isRoundSolved = false; switchScreen('lobby'); });
 document.getElementById('btn-restart').onclick = () => { document.getElementById('game-over-overlay').classList.add('hidden'); switchScreen('lobby'); };
 
-// GAME LOGIC
-socket.on('gameStarted', () => {
-    switchScreen('game');
-    createGrid();
-    chatInput.disabled = false;
-    document.getElementById('btn-send-chat').disabled = false;
-});
-
-socket.on('newRound', (data) => {
-    resetRoundUI(data.roundNumber, data.totalRounds);
-    isGameActive = true;
-    isRoundSolved = false;
-});
-
-socket.on('timerUpdate', (time) => document.getElementById('timer').innerText = time);
-
-socket.on('guessResult', ({ guess, result }) => {
-    paintRow(currentRow, guess, result);
-    updateKeyboard(guess, result);
-    if (result.every(r => r === 'correct')) {
-        isRoundSolved = true;
-        showMessage("VOCÊ ACERTOU!", "#22c55e");
-    } else {
-        currentRow++;
-        currentTile = 0;
-        currentGuessArr = ["", "", "", "", ""];
-        updateActiveTile();
-        if (currentRow >= 6) {
-            isGameActive = false;
-            showMessage("FIM DAS TENTATIVAS", "#e11d48");
-        }
-    }
-});
-
-socket.on('roundSuccess', (msg) => setTimeout(() => showMessage(msg, "#22c55e"), 1500));
-socket.on('roundEnded', (word) => { isGameActive = false; if(!isRoundSolved) showMessage(`PALAVRA: ${word}`, "#fff"); });
-
-socket.on('gameOver', (players) => {
-    document.getElementById('tiebreaker-prep-modal').classList.add('hidden');
-    document.getElementById('tiebreaker-wait-modal').classList.add('hidden');
-    const overlay = document.getElementById('game-over-overlay');
-    players.sort((a,b) => b.score - a.score);
-    document.getElementById('game-over-title').innerHTML = `<span style="color:#eab308">${players[0].name}</span> É O GOAT 🐐`;
-    document.getElementById('final-results').innerHTML = players.map((p,i) => `<div style="margin:10px; font-size:1.2rem">${i===0?'👑':`#${i+1}`} <strong>${p.name}</strong>: ${p.score} pts</div>`).join('');
-    overlay.classList.remove('hidden');
-});
-
-socket.on('tiebreakerAlert', (data) => {
-    isGameActive = false;
-    if (data.tiedPlayersIds.includes(socket.id)) {
-        const m = document.getElementById('tiebreaker-prep-modal'); m.classList.remove('hidden');
-        let c = 5; const el = document.getElementById('tiebreaker-countdown');
-        const i = setInterval(() => { c--; el.innerText = c; if(c<=0) { clearInterval(i); m.classList.add('hidden'); } }, 1000);
-    } else {
-        document.getElementById('tiebreaker-wait-modal').classList.remove('hidden');
-    }
-});
-
-socket.on('tiebreakerRoundStarted', (data) => {
-    document.getElementById('tiebreaker-wait-modal').classList.add('hidden');
-    if (!data.tiedPlayersIds.includes(socket.id)) {
-        isGameActive = false;
-        showMessage("MORTE SÚBITA EM ANDAMENTO...", "#eab308");
-    } else {
-        isGameActive = true; isRoundSolved = false; resetRoundUI("EXTRA", "GOAT");
-        showMessage("ACERTE PRIMEIRO!", "#e11d48");
-    }
-    resetRoundUI("EXTRA", "GOAT");
-});
-
-// Chat Logic
+// Chat
 const lobbyChatInput = document.getElementById('lobby-chat-input');
 const lobbyChatBtn = document.getElementById('btn-send-lobby-chat');
 chatToggleBtn.addEventListener('click', () => {
@@ -252,22 +251,6 @@ window.toggleMute = (pid, btn) => {
     if(silencedPlayers.has(pid)) { silencedPlayers.delete(pid); btn.innerText='volume_up'; btn.style.color='#888'; }
     else { silencedPlayers.add(pid); btn.innerText='volume_off'; btn.style.color='#e11d48'; }
 };
-socket.on('chatMessage', (data) => {
-    if (silencedPlayers.has(data.playerId)) return;
-    const gb = document.getElementById('chat-messages');
-    if (gb && document.getElementById('game-screen').classList.contains('active')) {
-        const d = document.createElement('div'); d.className = 'chat-usr-msg';
-        let m = data.playerId !== myPlayerId ? `<span class="material-icons mute-btn" onclick="toggleMute('${data.playerId}', this)">volume_up</span>` : '';
-        d.innerHTML = `${m} <span class="chat-name">${data.playerName}:</span> ${data.msg}`;
-        gb.appendChild(d); gb.scrollTop = gb.scrollHeight;
-    }
-    const lb = document.getElementById('lobby-chat-messages');
-    if (lb && document.getElementById('lobby-screen').classList.contains('active')) {
-        const d = document.createElement('div'); d.style.marginBottom = "4px";
-        d.innerHTML = `<strong style="color:#eab308">${data.playerName}:</strong> ${data.msg}`;
-        lb.appendChild(d); lb.scrollTop = lb.scrollHeight;
-    }
-});
 function sendMsg(input) { const m = input.value.trim(); if(!m) return; socket.emit('chatMessage', { roomId: currentRoomId, msg: m }); input.value = ""; input.focus(); }
 document.getElementById('btn-send-chat').onclick = () => sendMsg(chatInput);
 chatInput.onkeypress = (e) => { if(e.key==='Enter') sendMsg(chatInput); };
@@ -279,12 +262,8 @@ const confirmLeaveModal = document.getElementById('confirm-leave-overlay');
 document.getElementById('btn-leave-match').onclick = () => confirmLeaveModal.classList.remove('hidden');
 document.getElementById('btn-cancel-leave').onclick = () => confirmLeaveModal.classList.add('hidden');
 document.getElementById('btn-confirm-leave').onclick = () => { confirmLeaveModal.classList.add('hidden'); socket.emit('leaveMatch', currentRoomId); };
-socket.on('userDataUpdate', (user) => updateUserDisplay(user));
-socket.on('matchLeft', () => window.location.reload());
-socket.on('error', (msg) => alert(msg));
 
-
-// === NOVO SISTEMA DE GRID E INPUT (CURSOR) ===
+// === GRID E TECLADO (COM CURSOR / SELECT) ===
 
 function createGrid() {
     const grid = document.getElementById('grid');
@@ -296,7 +275,7 @@ function createGrid() {
             const tile = document.createElement('div');
             tile.className = 'tile';
             tile.id = `tile-${i}-${j}`;
-            // CLICK TO SELECT
+            // CLICK TO SELECT (RESTAURADO)
             tile.onclick = () => {
                 if (i === currentRow && isGameActive) {
                     currentTile = j;

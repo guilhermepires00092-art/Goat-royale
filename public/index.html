@@ -56,7 +56,7 @@
         </div>
     </div>
 
-    <!-- 3. TELA DE SETUP (CRIAR/ENTRAR) - CORRIGIDA -->
+    <!-- 3. TELA DE SETUP (CRIAR/ENTRAR) -->
     <div id="lobby-setup-screen" class="screen">
         <div class="card login-card" style="max-width: 500px;">
             <div style="width: 100%; text-align: left; margin-bottom: 10px;">
@@ -72,27 +72,23 @@
                 <div class="setup-box">
                     <div class="setup-title">CRIAR SALA</div>
                     
-                    <div class="room-config">
-                        <!-- Toggle de Sala Pública -->
-                        <label class="toggle-control">
-                            <span class="toggle-switch">
-                                <input type="checkbox" id="public-room-check">
-                                <span class="slider"></span>
-                            </span>
-                            <span class="control-label">Sala Pública</span>
+                    <div class="config-row">
+                        <span class="config-label">Sala Pública</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="public-room-check">
+                            <span class="slider"></span>
                         </label>
-                        
-                        <!-- Slider de Jogadores -->
-                        <div class="slider-container">
-                            <div style="display:flex; justify-content:space-between; width:100%; margin-bottom: 5px;">
-                                <span class="config-label" style="font-size:0.9rem; color:#ccc;">Max Jogadores</span>
-                                <span id="player-limit-display" style="color:var(--accent-red); font-weight:bold;">10</span>
-                            </div>
-                            <input type="range" id="room-size-slider" min="2" max="20" value="10" class="range-input">
+                    </div>
+                    
+                    <div class="config-row vertical">
+                        <div style="display:flex; justify-content:space-between; width:100%;">
+                            <span class="config-label">Jogadores</span>
+                            <span id="player-limit-display" style="color:var(--accent-red); font-weight:bold;">10</span>
                         </div>
+                        <input type="range" id="room-size-slider" min="2" max="20" value="10" class="range-input">
                     </div>
 
-                    <button id="btn-create-room" class="btn-primary" style="width:100%; margin-top:15px;">CRIAR SALA</button>
+                    <button id="btn-create-room" class="btn-primary" style="width:100%; margin-top:10px;">CRIAR SALA</button>
                 </div>
 
                 <!-- Caixa de Entrada -->
@@ -179,7 +175,8 @@
             <div id="message-area"></div>
             
             <div id="game-stage">
-                <div id="grid-container"><div id="grid"></div></div>
+                <!-- GRID CONTAINER REMOVIDO PARA ALINHAMENTO CORRETO -->
+                <div id="grid"></div>
                 <div id="keyboard"></div>
             </div>
             
