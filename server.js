@@ -11,9 +11,12 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const rateLimit = require('express-rate-limit');
 
 const app = express();
+// Configuração essencial para o Google aceitar o https do Render
 app.set('trust proxy', 1);
 
 const server = http.createServer(app);
+
+// Configuração do Socket para estabilidade
 const io = new Server(server, {
     pingTimeout: 60000,
     pingInterval: 25000,
@@ -45,12 +48,10 @@ const userSchema = new mongoose.Schema({
     username: String,
     avatar: String,
     score: { type: Number, default: 0 },
-    // Alterado: Padrão 5 energias
     energy: { type: Number, default: 5 }, 
     wins: { type: Number, default: 0 },
     gamesPlayed: { type: Number, default: 0 },
     lastIp: String,
-    // Novo campo para controlar o reset diário
     lastDailyLogin: { type: Date, default: Date.now }, 
     createdAt: { type: Date, default: Date.now }
 });
@@ -70,7 +71,7 @@ passport.use(new GoogleStrategy({
                 googleId: profile.id,
                 username: profile.displayName,
                 avatar: profile.photos[0].value,
-                energy: 5 // Começa com 5
+                energy: 5
             });
         }
         return done(null, user);
@@ -144,77 +145,83 @@ function emitPlayerUpdates(roomId) {
     const room = rooms[roomId];
     if (!room) return;
     const list = Object.values(room.players);
-    io.to(roomId).emit('updatePlayerList', list);
+    // ATENÇÃO: Envia a lista E o maxPlayers para o frontend corrigir o contador (Ex: 1/20)
+    io.to(roomId).emit('updatePlayerList', list, room.maxPlayers);
     io.to(roomId).emit('updateScoreboard', list);
     emitRoomList();
 }
 
-// === LÓGICA DE RESET DIÁRIO ===
 async function checkDailyReset(userId) {
     try {
         const user = await User.findById(userId);
         if (!user) return null;
-
         const now = new Date();
         const lastLogin = new Date(user.lastDailyLogin);
-        
-        // Verifica se é um dia diferente (comparando dia, mês e ano)
-        const isDifferentDay = 
-            now.getDate() !== lastLogin.getDate() ||
-            now.getMonth() !== lastLogin.getMonth() ||
-            now.getFullYear() !== lastLogin.getFullYear();
+        const isDifferentDay = now.getDate() !== lastLogin.getDate() || now.getMonth() !== lastLogin.getMonth() || now.getFullYear() !== lastLogin.getFullYear();
 
         if (isDifferentDay) {
-            // Reseta para 5 se tiver menos que 5
-            // Se o cara comprou energia e tem 10, não tira dele.
-            if (user.energy < 5) {
-                user.energy = 5;
-            }
+            if (user.energy < 5) user.energy = 5;
             user.lastDailyLogin = now;
             await user.save();
-            console.log(`Reset diário para ${user.username}: Energia ajustada.`);
         } else {
-            // Só atualiza o login se for mesmo dia
             user.lastDailyLogin = now;
             await user.save();
         }
         return user;
-    } catch (e) {
-        console.error("Erro no daily reset:", e);
-        return null;
-    }
+    } catch (e) { return null; }
 }
-
 
 // === SOCKET LOGIC ===
 io.on('connection', async (socket) => {
-    const currentConnections = io.engine.clientsCount;
-    if (currentConnections > MAX_GLOBAL_PLAYERS) {
-        socket.emit('error', 'Servidor lotado!');
-        socket.disconnect(true);
-        return;
-    }
+    const user = socket.request.user;
+    if(!user || io.engine.clientsCount > MAX_GLOBAL_PLAYERS) { socket.disconnect(); return; }
 
-    const sessionUser = socket.request.user;
-    if(!sessionUser) { socket.disconnect(); return; }
+    const dbUser = await checkDailyReset(user._id);
+    if (!dbUser) { socket.disconnect(); return; }
 
-    // Roda a verificação diária ao conectar
-    const user = await checkDailyReset(sessionUser._id);
-    if (!user) { socket.disconnect(); return; }
-
-    console.log(`+1 Jogador: ${user.username} (Energia: ${user.energy})`);
-    socket.emit('userDataUpdate', user);
+    console.log(`+1 Jogador: ${dbUser.username}`);
+    socket.emit('userDataUpdate', dbUser);
     emitRoomList();
 
-    // --- CRIAR SALA (ATUALIZADO COM TAMANHO VARIÁVEL) ---
+    // --- FUNÇÃO DE SAÍDA / HERANÇA ---
+    async function handlePlayerExit(roomId, socketId) {
+        const room = rooms[roomId];
+        if (!room || !room.players[socketId]) return;
+
+        const player = room.players[socketId];
+        const wasHost = player.isHost;
+
+        // Desconta energia se saiu durante o jogo
+        if (room.state === 'PLAYING' || room.state === 'TIEBREAKER') {
+            await User.findByIdAndUpdate(player.dbId, { $inc: { energy: -1, gamesPlayed: 1 } });
+        }
+
+        delete room.players[socketId];
+        
+        // Se sala vazia, deleta.
+        if (Object.keys(room.players).length === 0) {
+            clearInterval(room.timer);
+            delete rooms[roomId];
+            emitRoomList();
+        } else {
+            // Herança de Host
+            if (wasHost) {
+                const remainingIds = Object.keys(room.players);
+                const nextHostId = remainingIds[0];
+                room.players[nextHostId].isHost = true;
+                room.host = nextHostId;
+                io.to(nextHostId).emit('youAreHost'); 
+            }
+            emitPlayerUpdates(roomId);
+        }
+    }
+
     socket.on('createRoom', async ({ isPublic, roomSize }) => {
         if (Object.keys(rooms).length >= MAX_ROOMS) return socket.emit('error', 'Limite de salas.');
-        
-        // Verifica energia novamente no banco para garantir
-        const dbUser = await User.findById(user._id);
-        if (dbUser.energy < 1) return socket.emit('error', 'Sem energia!');
+        const u = await User.findById(user._id);
+        if (u.energy < 1) return socket.emit('error', 'Sem energia!');
 
-        // Valida tamanho da sala (mínimo 2, máximo 20)
+        // Validação do tamanho da sala
         let limit = parseInt(roomSize);
         if (isNaN(limit) || limit < 2) limit = 2;
         if (limit > 20) limit = 20;
@@ -223,20 +230,20 @@ io.on('connection', async (socket) => {
         rooms[roomId] = {
             id: roomId, state: 'LOBBY', players: {}, host: socket.id,
             currentRound: 0, currentWord: "", timer: null, timeLeft: 0,
-            solversCount: 0, 
-            isPublic: !!isPublic, 
-            maxPlayers: limit, // Usa o limite definido pelo anfitrião
+            solversCount: 0, isPublic: !!isPublic, 
+            maxPlayers: limit, // Define o limite escolhido
             gameMode: 'default'
         };
-        joinRoomLogic(socket, roomId, dbUser, true);
+        joinRoomLogic(socket, roomId, u, true);
     });
 
     socket.on('joinRoom', async ({ roomId }) => {
-        const dbUser = await User.findById(user._id);
-        if (dbUser.energy < 1) return socket.emit('error', 'Sem energia!');
+        const u = await User.findById(user._id);
+        if (u.energy < 1) return socket.emit('error', 'Sem energia!');
         const room = rooms[roomId];
-        if (!room || room.state !== 'LOBBY' || Object.keys(room.players).length >= room.maxPlayers) return socket.emit('error', 'Erro ao entrar (Cheia ou em jogo).');
-        joinRoomLogic(socket, roomId, dbUser, false);
+        // Permite entrar se estiver no LOBBY ou ENDED (para jogar novamente)
+        if (!room || (room.state !== 'LOBBY' && room.state !== 'ENDED') || Object.keys(room.players).length >= room.maxPlayers) return socket.emit('error', 'Erro ao entrar.');
+        joinRoomLogic(socket, roomId, u, false);
     });
 
     function joinRoomLogic(socket, roomId, dbUser, isHost) {
@@ -248,41 +255,6 @@ io.on('connection', async (socket) => {
         };
         socket.emit('roomJoined', { roomId, isHost, playerId: socket.id });
         emitPlayerUpdates(roomId);
-    }
-
-    // --- FUNÇÃO DE SAÍDA (HERANÇA DE HOST) ---
-    async function handlePlayerExit(roomId, socketId) {
-        const room = rooms[roomId];
-        if (!room || !room.players[socketId]) return;
-
-        const player = room.players[socketId];
-        const wasHost = player.isHost;
-
-        // Desconta energia se saiu no meio
-        if (room.state === 'PLAYING') {
-            await User.findByIdAndUpdate(player.dbId, { $inc: { energy: -1, gamesPlayed: 1 } });
-            // Atualiza para o cliente saber que gastou
-            const u = await User.findById(player.dbId);
-            // Tenta enviar para o socket se ele ainda estiver "meio" conectado, ou ignora
-            // O importante é o banco estar certo para a proxima vez
-        }
-
-        delete room.players[socketId];
-        
-        if (Object.keys(room.players).length === 0) {
-            clearInterval(room.timer);
-            delete rooms[roomId];
-            emitRoomList();
-        } else {
-            if (wasHost) {
-                const remainingIds = Object.keys(room.players);
-                const nextHostId = remainingIds[0];
-                room.players[nextHostId].isHost = true;
-                room.host = nextHostId;
-                io.to(nextHostId).emit('youAreHost'); 
-            }
-            emitPlayerUpdates(roomId);
-        }
     }
 
     socket.on('chatMessage', ({ roomId, msg }) => {
@@ -304,31 +276,46 @@ io.on('connection', async (socket) => {
 
     socket.on('submitGuess', async ({ roomId, guess }) => {
         const room = rooms[roomId];
-        if (!room || room.state !== 'PLAYING') return;
-        const p = room.players[socket.id];
-        if (p.solvedRound || (WORDS.length > 0 && !WORDS.includes(guess))) return;
+        if (!room) return;
+        if (room.state !== 'PLAYING' && room.state !== 'TIEBREAKER') return;
 
-        p.roundAttempts++;
+        const player = room.players[socket.id];
+        // Desempate: Só quem empatou joga
+        if (room.state === 'TIEBREAKER' && !room.tiedPlayersIds.includes(socket.id)) return;
+
+        if (player.solvedRound) return;
+        if (WORDS.length > 0 && !WORDS.includes(guess)) return;
+
+        player.roundAttempts++;
         const result = calculateWordleResult(guess, room.currentWord);
         const isCorrect = result.every(r => r === 'correct');
+
         socket.emit('guessResult', { guess, result });
 
         if (isCorrect) {
-            p.solvedRound = true; room.solversCount++;
+            player.solvedRound = true; room.solversCount++;
             let points = 0;
+
+            if (room.state === 'TIEBREAKER') {
+                player.score += 1;
+                io.to(roomId).emit('roundSuccess', `${player.name} É O GOAT SUPREMO!`);
+                endGameFinal(roomId);
+                return;
+            }
+
             if (room.gameMode === 'competitive') {
-                points = Math.max(1, 11 - p.roundAttempts);
-                p.score += points;
-                User.findByIdAndUpdate(p.dbId, { $inc: { score: points } }).exec();
-                io.to(roomId).emit('roundSuccess', `${p.name} VENCEU! (+${points})`);
+                points = Math.max(1, 11 - player.roundAttempts);
+                player.score += points;
+                User.findByIdAndUpdate(player.dbId, { $inc: { score: points } }).exec();
+                io.to(roomId).emit('roundSuccess', `${player.name} VENCEU A RODADA! (+${points})`);
                 emitPlayerUpdates(roomId);
                 clearInterval(room.timer);
                 io.to(roomId).emit('roundEnded', room.currentWord);
                 setTimeout(() => startRound(roomId), 5000);
             } else {
                 points = Math.max(1, 11 - room.solversCount);
-                p.score += points;
-                User.findByIdAndUpdate(p.dbId, { $inc: { score: points } }).exec();
+                player.score += points;
+                User.findByIdAndUpdate(player.dbId, { $inc: { score: points } }).exec();
                 socket.emit('roundSuccess', `+${points} PONTOS!`);
                 emitPlayerUpdates(roomId);
                 if (Object.values(room.players).every(pl => pl.solvedRound)) room.timeLeft = 2;
@@ -357,29 +344,83 @@ io.on('connection', async (socket) => {
 function startRound(roomId) {
     const room = rooms[roomId];
     if(!room) return;
-    if (room.currentRound >= TOTAL_ROUNDS) { endGame(roomId); return; }
+
+    if (room.currentRound >= TOTAL_ROUNDS) { checkGameEnd(roomId); return; }
+
     room.currentRound++;
     room.currentWord = WORDS.length > 0 ? WORDS[Math.floor(Math.random() * WORDS.length)] : "TERMO";
     room.timeLeft = ROUND_TIME; room.solversCount = 0;
     Object.values(room.players).forEach(p => { p.solvedRound = false; p.roundAttempts = 0; });
+    
+    setupTimer(room);
     io.to(roomId).emit('newRound', { roundNumber: room.currentRound, totalRounds: TOTAL_ROUNDS, gameMode: room.gameMode });
+}
+
+function setupTimer(room) {
     clearInterval(room.timer);
     room.timer = setInterval(() => {
         room.timeLeft--;
-        io.to(roomId).emit('timerUpdate', room.timeLeft);
-        if (room.timeLeft <= 0) { clearInterval(room.timer); io.to(roomId).emit('roundEnded', room.currentWord); setTimeout(() => startRound(roomId), 5000); }
+        io.to(room.id).emit('timerUpdate', room.timeLeft);
+        if (room.timeLeft <= 0) {
+            clearInterval(room.timer);
+            io.to(room.id).emit('roundEnded', room.currentWord);
+            if(room.state === 'TIEBREAKER') setTimeout(() => startTiebreaker(room.id), 5000);
+            else setTimeout(() => startRound(room.id), 5000);
+        }
     }, 1000);
 }
 
-async function endGame(roomId) {
+function checkGameEnd(roomId) {
     const room = rooms[roomId];
     if(!room) return;
-    room.state = 'ENDED';
+    const players = Object.values(room.players).sort((a,b) => b.score - a.score);
+
+    if (players.length > 1 && players[0].score === players[1].score) {
+        room.state = 'TIEBREAKER';
+        const maxScore = players[0].score;
+        room.tiedPlayersIds = players.filter(p => p.score === maxScore).map(p => p.id);
+        io.to(roomId).emit('tiebreakerAlert', { tiedPlayersIds: room.tiedPlayersIds });
+        setTimeout(() => startTiebreaker(roomId), 5000);
+    } else {
+        endGameFinal(roomId);
+    }
+}
+
+function startTiebreaker(roomId) {
+    const room = rooms[roomId];
+    if(!room) return;
+    room.currentRound++; 
+    room.currentWord = WORDS.length > 0 ? WORDS[Math.floor(Math.random() * WORDS.length)] : "TERMO";
+    room.timeLeft = ROUND_TIME; room.solversCount = 0;
+    Object.values(room.players).forEach(p => { p.solvedRound = false; p.roundAttempts = 0; });
+    setupTimer(room);
+    io.to(roomId).emit('tiebreakerRoundStarted', { tiedPlayersIds: room.tiedPlayersIds });
+}
+
+async function endGameFinal(roomId) {
+    const room = rooms[roomId];
+    if(!room) return;
+    
+    // PERSISTÊNCIA DA SALA (Permite jogar novamente)
+    room.state = 'LOBBY';
+    room.currentRound = 0;
+    room.solversCount = 0;
+    room.tiedPlayersIds = [];
+    clearInterval(room.timer);
+
     const players = Object.values(room.players).sort((a,b) => b.score - a.score);
     if(players.length > 0) await User.findByIdAndUpdate(players[0].dbId, { $inc: { wins: 1 } });
+    
     io.to(roomId).emit('gameOver', players);
-    delete rooms[roomId];
+    
+    // Reseta status para a próxima
+    Object.values(room.players).forEach(p => { p.score = 0; p.solvedRound = false; p.roundAttempts = 0; });
+    
     emitRoomList();
+    setTimeout(() => {
+        io.to(roomId).emit('returnToLobby');
+        emitPlayerUpdates(roomId); // Atualiza o lobby com os jogadores que ficaram
+    }, 5000);
 }
 
 function calculateWordleResult(guess, target) {
