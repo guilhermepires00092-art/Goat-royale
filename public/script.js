@@ -4,11 +4,11 @@ const socket = io();
 // COLE SUA LISTA CLIENT_WORDS AQUI
 // ===========================================
 const CLIENT_WORDS = [
-    // ... COLE AQUI ...
+    // ... COLE SUAS PALAVRAS AQUI ...
     "ABATA", "ABOCA"
 ];
 
-// Elementos
+// Elementos Globais
 const screens = {
     login: document.getElementById('login-screen'),
     dashboard: document.getElementById('dashboard-screen'),
@@ -21,6 +21,17 @@ const messageArea = document.getElementById('message-area');
 const chatInput = document.getElementById('chat-input');
 const chatToggleBtn = document.getElementById('btn-toggle-chat'); 
 const chatContainer = document.getElementById('chat-container');
+
+// ESTADO DO JOGO ATUALIZADO
+let currentRoomId = null;
+let currentRow = 0;
+let currentTile = 0; // Índice do cursor (0 a 4)
+let currentGuessArr = ["", "", "", "", ""]; // Array de letras
+let isGameActive = false;
+let isRoundSolved = false;
+let myPlayerId = null;
+let silencedPlayers = new Set();
+let isChatVisible = true;
 
 // === INICIALIZAÇÃO ===
 fetch('/api/me')
@@ -52,7 +63,6 @@ function switchScreen(name) {
     if(screens[name]) screens[name].classList.add('active');
 }
 
-// Slider Visual (Atualiza o número na tela)
 const roomSizeSlider = document.getElementById('room-size-slider');
 if (roomSizeSlider) {
     roomSizeSlider.addEventListener('input', (e) => {
@@ -97,34 +107,21 @@ document.getElementById('btn-start-game').onclick = () => {
     socket.emit('startGame', { roomId: currentRoomId, gameMode: mode });
 };
 
-// Renderização Lista de Salas
 socket.on('updateRoomList', (rooms) => {
     const container = document.getElementById('room-list-items');
     if (!container) return;
     container.innerHTML = '';
-    if (rooms.length === 0) return container.innerHTML = '<p style="text-align:center; color:#666; font-size:0.9rem;">Nenhuma sala pública encontrada.</p>';
+    if (rooms.length === 0) return container.innerHTML = '<p style="text-align:center; color:#666; font-size:0.9rem;">Nenhuma sala pública.</p>';
     rooms.forEach(r => {
         const el = document.createElement('div');
         el.className = 'room-item';
         const modeBadge = r.gameMode === 'competitive' ? '🏆' : '⚔️';
-        el.innerHTML = `
-            <div class="room-info">
-                <strong>${r.hostName}'s Room <span class="room-badge">${modeBadge}</span></strong>
-                <span>${r.playerCount} / ${r.maxPlayers} Jogadores</span>
-            </div>
-            <span class="material-icons" style="color:#666; font-size:1rem;">arrow_forward_ios</span>
-        `;
-        el.onclick = () => {
-            el.style.transform = "scale(0.98)";
-            setTimeout(() => el.style.transform = "scale(1)", 100);
-            document.getElementById('room-code-input').value = r.id;
-            socket.emit('joinRoom', { roomId: r.id });
-        };
+        el.innerHTML = `<div class="room-info"><strong>${r.hostName}'s Room <span class="room-badge">${modeBadge}</span></strong><span>${r.playerCount} / ${r.maxPlayers} Jogadores</span></div><span class="material-icons" style="color:#666; font-size:1rem;">arrow_forward_ios</span>`;
+        el.onclick = () => { document.getElementById('room-code-input').value = r.id; socket.emit('joinRoom', { roomId: r.id }); };
         container.appendChild(el);
     });
 });
 
-// Lobby Logic
 socket.on('roomJoined', (data) => {
     currentRoomId = data.roomId;
     myPlayerId = data.playerId;
@@ -135,35 +132,24 @@ socket.on('roomJoined', (data) => {
     const ctrl = document.getElementById('host-controls');
     const wait = document.getElementById('waiting-msg');
     
-    if(data.isHost) { 
-        ctrl.style.display = 'block'; 
-        wait.style.display = 'none'; 
-    } else { 
-        ctrl.style.display = 'none'; 
-        wait.style.display = 'block'; 
-    }
+    if(data.isHost) { ctrl.style.display = 'block'; wait.style.display = 'none'; } 
+    else { ctrl.style.display = 'none'; wait.style.display = 'block'; }
 });
 
 socket.on('updatePlayerList', (players, maxPlayers) => {
     const lobbyList = document.getElementById('player-list-lobby');
-    
-    // Atualiza Contador de Jogadores (Ex: 3/20)
     if (document.getElementById('player-count-badge')) {
         const limit = maxPlayers || 10;
         document.getElementById('player-count-badge').innerText = `${players.length}/${limit}`;
     }
-
     if (lobbyList) {
         lobbyList.innerHTML = players.map(p => {
             const hostBadge = p.isHost ? '<div class="host-badge">HOST</div>' : '';
             const avatarUrl = p.avatar || 'https://cdn-icons-png.flaticon.com/512/847/847969.png'; 
-            return `
-            <div class="player-card ${p.isHost?'is-host':''}"><img src="${avatarUrl}" alt="Avatar">${hostBadge}<span>${p.name}</span></div>
-            `;
+            return `<div class="player-card ${p.isHost?'is-host':''}"><img src="${avatarUrl}" alt="Avatar">${hostBadge}<span>${p.name}</span></div>`;
         }).join('');
     }
-
-    // Herança de Host
+    
     const myData = players.find(p => p.id === socket.id);
     const hostControls = document.getElementById('host-controls');
     const waitingMsg = document.getElementById('waiting-msg');
@@ -179,21 +165,10 @@ socket.on('updatePlayerList', (players, maxPlayers) => {
 });
 
 socket.on('youAreHost', () => alert("Você é o novo anfitrião!"));
+socket.on('returnToLobby', () => { isGameActive = false; isRoundSolved = false; switchScreen('lobby'); });
+document.getElementById('btn-restart').onclick = () => { document.getElementById('game-over-overlay').classList.add('hidden'); switchScreen('lobby'); };
 
-// === LÓGICA DE RETORNO AO LOBBY (JOGAR NOVAMENTE) ===
-socket.on('returnToLobby', () => {
-    isGameActive = false; isRoundSolved = false;
-    switchScreen('lobby');
-});
-
-document.getElementById('btn-restart').onclick = () => {
-    document.getElementById('game-over-overlay').classList.add('hidden');
-    switchScreen('lobby');
-};
-
-// === LÓGICA DE JOGO ===
-let currentRoomId = null; let currentRow = 0; let currentTile = 0; let currentGuess = ""; let isGameActive = false; let isRoundSolved = false; let silencedPlayers = new Set(); let isChatVisible = true;
-
+// GAME LOGIC
 socket.on('gameStarted', () => {
     switchScreen('game');
     createGrid();
@@ -218,7 +193,8 @@ socket.on('guessResult', ({ guess, result }) => {
     } else {
         currentRow++;
         currentTile = 0;
-        currentGuess = "";
+        currentGuessArr = ["", "", "", "", ""];
+        updateActiveTile();
         if (currentRow >= 6) {
             isGameActive = false;
             showMessage("FIM DAS TENTATIVAS", "#e11d48");
@@ -229,11 +205,9 @@ socket.on('guessResult', ({ guess, result }) => {
 socket.on('roundSuccess', (msg) => setTimeout(() => showMessage(msg, "#22c55e"), 1500));
 socket.on('roundEnded', (word) => { isGameActive = false; if(!isRoundSolved) showMessage(`PALAVRA: ${word}`, "#fff"); });
 
-// === GAME OVER & DESEMPATE ===
 socket.on('gameOver', (players) => {
     document.getElementById('tiebreaker-prep-modal').classList.add('hidden');
     document.getElementById('tiebreaker-wait-modal').classList.add('hidden');
-    
     const overlay = document.getElementById('game-over-overlay');
     players.sort((a,b) => b.score - a.score);
     document.getElementById('game-over-title').innerHTML = `<span style="color:#eab308">${players[0].name}</span> É O GOAT 🐐`;
@@ -264,23 +238,20 @@ socket.on('tiebreakerRoundStarted', (data) => {
     resetRoundUI("EXTRA", "GOAT");
 });
 
-// CHAT & UTILS
+// Chat Logic
 const lobbyChatInput = document.getElementById('lobby-chat-input');
 const lobbyChatBtn = document.getElementById('btn-send-lobby-chat');
-
 chatToggleBtn.addEventListener('click', () => {
     isChatVisible = !isChatVisible;
     const icon = chatToggleBtn.querySelector('.material-icons');
     if(isChatVisible) { chatContainer.style.display = 'flex'; icon.innerText = 'chat'; chatToggleBtn.style.opacity = '1'; }
     else { chatContainer.style.display = 'none'; icon.innerText = 'chat_bubble_outline'; chatToggleBtn.style.opacity = '0.5'; }
 });
-
 window.toggleMute = (pid, btn) => {
     if(pid===myPlayerId) return;
     if(silencedPlayers.has(pid)) { silencedPlayers.delete(pid); btn.innerText='volume_up'; btn.style.color='#888'; }
     else { silencedPlayers.add(pid); btn.innerText='volume_off'; btn.style.color='#e11d48'; }
 };
-
 socket.on('chatMessage', (data) => {
     if (silencedPlayers.has(data.playerId)) return;
     const gb = document.getElementById('chat-messages');
@@ -297,114 +268,155 @@ socket.on('chatMessage', (data) => {
         lb.appendChild(d); lb.scrollTop = lb.scrollHeight;
     }
 });
-
 function sendMsg(input) { const m = input.value.trim(); if(!m) return; socket.emit('chatMessage', { roomId: currentRoomId, msg: m }); input.value = ""; input.focus(); }
 document.getElementById('btn-send-chat').onclick = () => sendMsg(chatInput);
 chatInput.onkeypress = (e) => { if(e.key==='Enter') sendMsg(chatInput); };
-if(document.getElementById('btn-send-lobby-chat')) document.getElementById('btn-send-lobby-chat').onclick = () => sendMsg(lobbyChatInput);
+if(lobbyChatBtn) lobbyChatBtn.onclick = () => sendMsg(lobbyChatInput);
 if(lobbyChatInput) lobbyChatInput.onkeypress = (e) => { if(e.key==='Enter') sendMsg(lobbyChatInput); };
 
-// Leave & Utils
+// Leave Logic
 const confirmLeaveModal = document.getElementById('confirm-leave-overlay');
 document.getElementById('btn-leave-match').onclick = () => confirmLeaveModal.classList.remove('hidden');
 document.getElementById('btn-cancel-leave').onclick = () => confirmLeaveModal.classList.add('hidden');
 document.getElementById('btn-confirm-leave').onclick = () => { confirmLeaveModal.classList.add('hidden'); socket.emit('leaveMatch', currentRoomId); };
-
 socket.on('userDataUpdate', (user) => updateUserDisplay(user));
 socket.on('matchLeft', () => window.location.reload());
 socket.on('error', (msg) => alert(msg));
 
-// GAME HELPERS
-function createGrid() { 
-    const g = document.getElementById('grid'); 
-    g.innerHTML = ''; 
-    for(let i=0;i<6;i++){ 
-        const r=document.createElement('div'); r.className='grid-row'; 
-        for(let j=0;j<5;j++){ 
-            const t=document.createElement('div'); t.className='tile'; t.id=`tile-${i}-${j}`; 
-            r.appendChild(t); 
-        } 
-        g.appendChild(r); 
-    } 
-    createKeyboard(); 
+
+// === NOVO SISTEMA DE GRID E INPUT (CURSOR) ===
+
+function createGrid() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    for(let i=0; i<6; i++) {
+        const row = document.createElement('div');
+        row.className = 'grid-row';
+        for(let j=0; j<5; j++) {
+            const tile = document.createElement('div');
+            tile.className = 'tile';
+            tile.id = `tile-${i}-${j}`;
+            // CLICK TO SELECT
+            tile.onclick = () => {
+                if (i === currentRow && isGameActive) {
+                    currentTile = j;
+                    updateActiveTile();
+                }
+            };
+            row.appendChild(tile);
+        }
+        grid.appendChild(row);
+    }
+    createKeyboard();
+    updateActiveTile();
 }
 
-function createKeyboard() { 
-    const k = document.getElementById('keyboard'); 
-    k.innerHTML = `
-    <div class="row">${'QWERTYUIOP'.split('').map(k=>`<button data-key="${k}">${k}</button>`).join('')}</div>
-    <div class="row">${'ASDFGHJKL'.split('').map(k=>`<button data-key="${k}">${k}</button>`).join('')}</div>
-    <div class="row"><button data-key="ENTER" class="wide-key action-btn">ENTER</button>${'ZXCVBNM'.split('').map(k=>`<button data-key="${k}">${k}</button>`).join('')}<button data-key="BACKSPACE" class="wide-key action-btn"><span class="material-icons">backspace</span></button></div>`; 
-    document.querySelectorAll('#keyboard button').forEach(b => b.onclick = (e) => { e.preventDefault(); handleInput(b.dataset.key); }); 
+function createKeyboard() {
+    const k = document.getElementById('keyboard');
+    k.innerHTML = `<div class="row">${'QWERTYUIOP'.split('').map(k=>`<button data-key="${k}">${k}</button>`).join('')}</div><div class="row">${'ASDFGHJKL'.split('').map(k=>`<button data-key="${k}">${k}</button>`).join('')}</div><div class="row"><button data-key="ENTER" class="wide-key action-btn">ENTER</button>${'ZXCVBNM'.split('').map(k=>`<button data-key="${k}">${k}</button>`).join('')}<button data-key="BACKSPACE" class="wide-key action-btn"><span class="material-icons">backspace</span></button></div>`;
+    document.querySelectorAll('#keyboard button').forEach(b => b.onclick = (e) => { e.preventDefault(); handleInput(b.dataset.key); });
 }
 
-function resetRoundUI(r, t) { 
-    currentRow = 0; currentTile = 0; currentGuess = ""; 
-    document.getElementById('round-display').innerText = `${r}/${t}`; 
-    document.getElementById('message-area').style.opacity = '0'; 
-    document.querySelectorAll('.tile').forEach(e => { e.innerText = ''; e.className = 'tile'; e.style.animation = 'none'; e.classList.remove('correct','present','absent','filled'); }); 
-    createKeyboard(); 
+function updateActiveTile() {
+    document.querySelectorAll('.tile').forEach(t => t.classList.remove('active-input'));
+    if (isGameActive && !isRoundSolved) {
+        const active = document.getElementById(`tile-${currentRow}-${currentTile}`);
+        if (active) active.classList.add('active-input');
+    }
 }
 
-function showMessage(m, c) { 
-    const el = document.getElementById('message-area'); 
-    el.innerText = m; el.style.color = c; el.style.opacity = '1'; 
+function resetRoundUI(r, t) {
+    currentRow = 0; currentTile = 0; currentGuessArr = ["", "", "", "", ""];
+    document.getElementById('round-display').innerText = `${r}/${t}`;
+    document.getElementById('message-area').style.opacity = '0';
+    document.querySelectorAll('.tile').forEach(e => { e.innerText = ''; e.className = 'tile'; e.style.animation = 'none'; e.classList.remove('correct','present','absent','filled','active-input'); });
+    createKeyboard();
+    updateActiveTile();
 }
 
-function handleInput(k) { 
-    if (!isGameActive || isRoundSolved) return; 
-    if (k === 'ENTER') return submitGuess(); 
-    if (k === 'BACKSPACE') { 
-        if (currentTile > 0) { 
-            currentTile--; currentGuess = currentGuess.slice(0, -1); 
-            const t = document.getElementById(`tile-${currentRow}-${currentTile}`); 
-            t.innerText = ''; t.classList.remove('filled'); 
-        } 
-        return; 
-    } 
-    if (currentTile < 5 && k.length === 1 && /[A-Z]/.test(k)) { 
-        const t = document.getElementById(`tile-${currentRow}-${currentTile}`); 
-        t.innerText = k; t.classList.add('filled'); 
-        currentGuess += k; currentTile++; 
-    } 
+function showMessage(m, c) {
+    const el = document.getElementById('message-area');
+    el.innerText = m; el.style.color = c; el.style.opacity = '1';
 }
 
-function submitGuess() { 
-    if (currentGuess.length !== 5) { showMessage("Muito curta", "#eab308"); setTimeout(()=>document.getElementById('message-area').style.opacity='0', 1500); return; } 
-    if (!CLIENT_WORDS.includes(currentGuess)) { showMessage("Palavra inválida", "#e11d48"); setTimeout(()=>document.getElementById('message-area').style.opacity='0', 1500); return; } 
-    socket.emit('submitGuess', { roomId: currentRoomId, guess: currentGuess }); 
+function handleInput(key) {
+    if (!isGameActive || isRoundSolved) return;
+
+    if (key === 'ENTER') {
+        const guess = currentGuessArr.join('');
+        return submitGuess(guess);
+    }
+
+    if (key === 'BACKSPACE') {
+        if (currentGuessArr[currentTile] === "") {
+            if (currentTile > 0) currentTile--;
+        }
+        currentGuessArr[currentTile] = "";
+        const t = document.getElementById(`tile-${currentRow}-${currentTile}`);
+        t.innerText = "";
+        t.classList.remove('filled');
+        updateActiveTile();
+        return;
+    }
+
+    if (key === 'ARROWLEFT') {
+        if (currentTile > 0) currentTile--;
+        updateActiveTile();
+        return;
+    }
+
+    if (key === 'ARROWRIGHT') {
+        if (currentTile < 4) currentTile++;
+        updateActiveTile();
+        return;
+    }
+
+    if (key.length === 1 && /[A-Z]/.test(key)) {
+        currentGuessArr[currentTile] = key;
+        const t = document.getElementById(`tile-${currentRow}-${currentTile}`);
+        t.innerText = key;
+        t.classList.add('filled');
+        t.style.animation = "pop 0.1s";
+        if (currentTile < 4) currentTile++;
+        updateActiveTile();
+    }
 }
 
-function paintRow(r, g, res) { 
-    for(let i=0; i<5; i++) { 
-        const t = document.getElementById(`tile-${r}-${i}`); 
-        setTimeout(() => { t.classList.add(res[i]); t.style.animation = "pop 0.3s ease"; }, i*150); 
-    } 
+function submitGuess(guess) {
+    if (guess.length !== 5) { showMessage("Muito curta", "#eab308"); setTimeout(()=>document.getElementById('message-area').style.opacity='0', 1500); return; }
+    if (!CLIENT_WORDS.includes(guess)) { showMessage("Palavra inválida", "#e11d48"); setTimeout(()=>document.getElementById('message-area').style.opacity='0', 1500); return; }
+    socket.emit('submitGuess', { roomId: currentRoomId, guess: guess });
 }
 
-function updateKeyboard(g, res) { 
-    for(let i=0; i<5; i++) { 
-        const k = document.querySelector(`button[data-key="${g[i]}"]`); 
-        if(k) { 
-            if(res[i] === 'correct') k.className = 'correct'; 
-            else if(res[i] === 'present' && !k.classList.contains('correct')) k.className = 'present'; 
-            else if(res[i] === 'absent' && !k.classList.contains('correct') && !k.classList.contains('present')) k.className = 'absent'; 
-        } 
-    } 
+function paintRow(r, g, res) {
+    for(let i=0; i<5; i++) { const t = document.getElementById(`tile-${r}-${i}`); setTimeout(() => { t.classList.add(res[i]); t.style.animation = "pop 0.3s ease"; }, i*150); }
 }
 
-function updateGameScoreboard(players) { 
-    const list = document.getElementById('live-score-list'); 
-    if(!list) return; 
-    players.sort((a,b) => b.score - a.score); 
+function updateKeyboard(g, res) {
+    for(let i=0; i<5; i++) {
+        const k = document.querySelector(`button[data-key="${g[i]}"]`);
+        if(k) {
+            if(res[i] === 'correct') k.className = 'correct';
+            else if(res[i] === 'present' && !k.classList.contains('correct')) k.className = 'present';
+            else if(res[i] === 'absent' && !k.classList.contains('correct') && !k.classList.contains('present')) k.className = 'absent';
+        }
+    }
+}
+
+function updateGameScoreboard(players) {
+    const list = document.getElementById('live-score-list');
+    if(!list) return;
+    players.sort((a,b) => b.score - a.score);
     list.innerHTML = players.map((p,i) => {
-        const avatarUrl = p.avatar || 'https://cdn-icons-png.flaticon.com/512/847/847969.png'; 
+        const avatarUrl = p.avatar || 'https://cdn-icons-png.flaticon.com/512/847/847969.png';
         return `<li><div style="display:flex;align-items:center;gap:8px"><span style="color:#888;font-size:0.8rem">#${i+1}</span><img src="${avatarUrl}" class="score-avatar"><span>${p.name}</span></div><span style="color:#eab308;font-weight:bold">${p.score}</span></li>`;
-    }).join(''); 
+    }).join('');
 }
 
-document.addEventListener('keydown', (e) => { 
-    if (document.activeElement === chatInput || document.activeElement === lobbyChatInput) return; 
-    const k = e.key.toUpperCase(); 
-    if(k==='ENTER'||k==='BACKSPACE'||/^[A-Z]$/.test(k)) handleInput(k); 
+document.addEventListener('keydown', (e) => {
+    if (document.activeElement === chatInput || document.activeElement === lobbyChatInput) return;
+    let k = e.key.toUpperCase();
+    if(e.key === 'ArrowLeft') k = 'ARROWLEFT';
+    if(e.key === 'ArrowRight') k = 'ARROWRIGHT';
+    if(k==='ENTER'||k==='BACKSPACE'||k==='ARROWLEFT'||k==='ARROWRIGHT'||/^[A-Z]$/.test(k)) handleInput(k);
 });
