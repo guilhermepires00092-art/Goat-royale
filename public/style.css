@@ -217,7 +217,7 @@ input:focus { border-color: var(--accent-red); }
 
 /* ==========================================================================
    DESIGN EXCLUSIVO PARA COMPUTADOR (DESKTOP)
-   Corrige: Salas esticadas, Vão no jogo e Ranking vertical
+   Corrige: Dashboard alinhada, Jogo centralizado e Ranking vertical
    ========================================================================== */
 
 @media (min-width: 769px) {
@@ -232,30 +232,38 @@ input:focus { border-color: var(--accent-red); }
     }
 
     /* --- 1. CORREÇÃO DA DASHBOARD (Salas Públicas) --- */
-    /* Impede que a caixa estique infinitamente */
+    /* Agora usa FLEX para garantir que fiquem lado a lado corretamente */
     .dashboard-content {
+        width: 100%;
         max-width: 900px;     
         height: auto;         
-        max-height: 85vh;     
-        display: grid;
-        grid-template-columns: 1fr 1fr; /* 2 colunas */
-        gap: 20px;
-        background: rgba(0,0,0,0.2); /* Fundo sutil para agrupar */
+        display: flex;        /* Mudado de Grid para Flex para alinhar melhor */
+        flex-direction: row;  /* Lado a Lado */
+        align-items: center;  /* Centraliza Verticalmente */
+        justify-content: space-between; /* Espaça os elementos */
+        gap: 40px;
+        background: rgba(0,0,0,0.2);
         border-radius: 12px;
-        padding: 30px;
+        padding: 40px;
     }
 
-    /* Coluna da Esquerda (Botões) */
-    .dashboard-actions { justify-content: center; }
+    /* Botões da Esquerda */
+    .dashboard-actions { 
+        flex: 1;
+        max-width: 350px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+    }
 
-    /* Coluna da Direita (Lista de Salas) */
+    /* Lista de Salas da Direita */
     .room-browser {
+        flex: 1.5;
         height: 400px; 
-        flex: none;    
         margin: 0;
     }
 
-    /* --- 2. CORREÇÃO DA TELA DE JOGO (Vão e Ranking) --- */
+    /* --- 2. CORREÇÃO DA TELA DE JOGO --- */
     
     /* Transforma a tela em Linha (Esquerda | Direita) */
     #game-screen.game-layout {
@@ -281,10 +289,9 @@ input:focus { border-color: var(--accent-red); }
         padding: 10px;
     }
     
-    /* Itens da lista mais compactos */
     .styled-list li { margin-bottom: 5px; }
 
-    /* ÁREA DO JOGO (Corrige o vão à direita) */
+    /* ÁREA DO JOGO */
     #main-game-area {
         flex: 1; 
         width: auto;
@@ -292,11 +299,11 @@ input:focus { border-color: var(--accent-red); }
         flex-direction: column;
     }
 
-    /* Centraliza o Grid no meio da área restante */
+    /* Centraliza o Grid */
     #game-stage {
         flex: 1;
         justify-content: center; /* Centraliza Verticalmente */
-        align-items: center;     /* Centraliza Horizontalmente (Remove o vão) */
+        align-items: center;     /* Centraliza Horizontalmente */
         padding-bottom: 150px;   /* Espaço para o chat */
     }
 
@@ -306,7 +313,6 @@ input:focus { border-color: var(--accent-red); }
         margin-bottom: 20px;
     }
     
-    /* Tiles um pouco mais refinados */
     .tile { font-size: 1.8rem; border-width: 2px; }
 
     /* CHAT FIXO RODAPÉ */
@@ -328,7 +334,6 @@ input:focus { border-color: var(--accent-red); }
         height: 180px;
     }
     
-    /* Scrollbar bonita para Webkit (Chrome/Edge) */
     ::-webkit-scrollbar { width: 8px; }
     ::-webkit-scrollbar-track { background: #121213; }
     ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
