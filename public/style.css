@@ -127,7 +127,6 @@ input:focus { border-color: var(--accent-red); }
     font-weight: bold; text-transform: uppercase; 
     cursor: pointer; transition: all 0.1s;
 }
-/* OBRIGATÓRIO PARA O CURSOR FUNCIONAR VISUALMENTE */
 .tile.active-input {
     border-color: var(--color-present) !important;
     box-shadow: 0 0 10px rgba(234, 179, 8, 0.3);
@@ -176,7 +175,7 @@ input:focus { border-color: var(--accent-red); }
 .wide { max-width: 500px; height: 80%; }
 .hidden { display: none !important; }
 
-/* === ESTILOS DO PERFIL E RANKING (CORRIGIDO) === */
+/* ESTILOS DO PERFIL E RANKING */
 .styled-list {
     list-style: none; padding: 0; margin-top: 15px;
     max-height: 400px; overflow-y: auto; width: 100%;
@@ -193,7 +192,7 @@ input:focus { border-color: var(--accent-red); }
 .profile-stats { display: flex; flex-direction: column; gap: 15px; margin-top: 15px; }
 .stat-item { display: flex; justify-content: space-between; font-size: 1.1rem; padding-bottom: 5px; border-bottom: 1px solid #333; }
 
-/* Mobile */
+/* Mobile (Celular) */
 @media (max-width: 768px) {
     .game-layout { flex-direction: column; }
     #scoreboard-container { width: 100%; height: 50px; border-right: none; border-bottom: 1px solid #333; display: flex; flex-direction: row; align-items: center; }
@@ -212,5 +211,126 @@ input:focus { border-color: var(--accent-red); }
     #chat-input-wrapper { height: 30px; }
     #room-list-items { max-height: 140px; }
 }
+
 @keyframes pop { 50% { transform: scale(1.1); } }
 @keyframes popIn { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+
+/* ==========================================================================
+   DESIGN EXCLUSIVO PARA COMPUTADOR (DESKTOP)
+   Corrige: Salas esticadas, Vão no jogo e Ranking vertical
+   ========================================================================== */
+
+@media (min-width: 769px) {
+
+    /* FUNDO MAIS BONITO NO PC */
+    body { background: radial-gradient(circle at center, #1e1e24 0%, #121213 100%); }
+
+    /* CENTRALIZAÇÃO DAS TELAS */
+    #dashboard-screen, #login-screen, #lobby-setup-screen {
+        justify-content: center;
+        align-items: center;
+    }
+
+    /* --- 1. CORREÇÃO DA DASHBOARD (Salas Públicas) --- */
+    /* Impede que a caixa estique infinitamente */
+    .dashboard-content {
+        max-width: 900px;     
+        height: auto;         
+        max-height: 85vh;     
+        display: grid;
+        grid-template-columns: 1fr 1fr; /* 2 colunas */
+        gap: 20px;
+        background: rgba(0,0,0,0.2); /* Fundo sutil para agrupar */
+        border-radius: 12px;
+        padding: 30px;
+    }
+
+    /* Coluna da Esquerda (Botões) */
+    .dashboard-actions { justify-content: center; }
+
+    /* Coluna da Direita (Lista de Salas) */
+    .room-browser {
+        height: 400px; 
+        flex: none;    
+        margin: 0;
+    }
+
+    /* --- 2. CORREÇÃO DA TELA DE JOGO (Vão e Ranking) --- */
+    
+    /* Transforma a tela em Linha (Esquerda | Direita) */
+    #game-screen.game-layout {
+        flex-direction: row;
+        align-items: stretch;
+    }
+
+    /* RANKING VERTICAL À ESQUERDA */
+    #scoreboard-container {
+        width: 280px;        
+        min-width: 280px;
+        height: 100vh;       
+        border-right: 1px solid #333;
+        border-bottom: none; 
+        background: #18181b;
+    }
+
+    /* Tabela de pontos ocupando a vertical */
+    .styled-list {
+        max-height: none; 
+        overflow-y: auto;
+        flex: 1;
+        padding: 10px;
+    }
+    
+    /* Itens da lista mais compactos */
+    .styled-list li { margin-bottom: 5px; }
+
+    /* ÁREA DO JOGO (Corrige o vão à direita) */
+    #main-game-area {
+        flex: 1; 
+        width: auto;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* Centraliza o Grid no meio da área restante */
+    #game-stage {
+        flex: 1;
+        justify-content: center; /* Centraliza Verticalmente */
+        align-items: center;     /* Centraliza Horizontalmente (Remove o vão) */
+        padding-bottom: 150px;   /* Espaço para o chat */
+    }
+
+    /* Ajuste do Grid para Monitor */
+    #grid {
+        transform: scale(1.1);
+        margin-bottom: 20px;
+    }
+    
+    /* Tiles um pouco mais refinados */
+    .tile { font-size: 1.8rem; border-width: 2px; }
+
+    /* CHAT FIXO RODAPÉ */
+    #chat-and-controls-wrapper {
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: #1e1e1e;
+        border-top: 1px solid #333;
+        z-index: 50;
+    }
+    
+    #chat-container {
+        max-width: 600px;
+        margin: 0 auto;
+        border-left: 1px solid #333;
+        border-right: 1px solid #333;
+        height: 180px;
+    }
+    
+    /* Scrollbar bonita para Webkit (Chrome/Edge) */
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: #121213; }
+    ::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: var(--accent-red); }
+}
