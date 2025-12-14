@@ -1,10 +1,14 @@
 // Removemos a inicialização global do socket
 let socket = null; 
 
+// Variável de controle para evitar envio duplo no Enter
+let isProcessingGuess = false;
+
 // ===========================================
 // COLE SUA LISTA CLIENT_WORDS AQUI
 // ===========================================
 const CLIENT_WORDS = [
+    // >>> COLE A LISTA GIGANTE AQUI <<<
     "ABACA", "ABATA", "ABATE", "ABATI", "ABEBE", "ABECE", "ABEDO", "ABETA", "ABETE", "ABETO",
     "ABEXI", "ABICO", "ABIDO", "ABIET", "ABIGA", "ABILA", "ABITA", "ABJEO", "ABOAR", "ABOAS",
     "ABOCA", "ABOFE", "ABOIO", "ABOIS", "ABOLE", "ABOLI", "ABONA", "ABONO", "ABOOI", "ABOOU",
@@ -612,8 +616,7 @@ const CLIENT_WORDS = [
     "ZIRRE", "ZIRRO", "ZIZIO", "ZOADA", "ZOAVA", "ZOEIA", "ZOICO", "ZOILO", "ZOMBA", "ZOMBA",
     "ZONAL", "ZONAR", "ZONAS", "ZONZO", "ZOOMS", "ZOOSE", "ZORRA", "ZORRO", "ZUAVO", "ZUMBA",
     "ZUMBE", "ZUMBI", "ZUMBO", "ZUNDA", "ZUNGA", "ZUNGU", "ZUNHI", "ZUNIR", "ZUNIU", "ZUNJA",
-    "ZUPAR", "ZURNA", "ZURRA", "ZURRE", "ZURRO", "ZURUO", "ZURZE", "MASSA", "MARTE", "MILTO", "PASSA", "PASSO", "PISCA" 
-    //... complete a lista ...
+    "ZUPAR", "ZURNA", "ZURRA", "ZURRE", "ZURRO", "ZURUO", "ZURZE", "MASSA", "MARTE", "MILTO", "PASSA", "PASSO", "PISCA","TERMO"
 ];
 
 const screens = {
@@ -754,6 +757,9 @@ function setupSocketEvents() {
     socket.on('timerUpdate', (time) => document.getElementById('timer').innerText = time);
 
     socket.on('guessResult', ({ guess, result }) => {
+        // DESTRAVA O INPUT ASSIM QUE RECEBE A RESPOSTA
+        isProcessingGuess = false;
+
         paintRow(currentRow, guess, result);
         updateKeyboard(guess, result);
         if (result.every(r => r === 'correct')) {
@@ -952,6 +958,9 @@ function updateActiveTile() {
 }
 
 function resetRoundUI(r, t) {
+    // RESETA A TRAVA DE CLIQUE DUPLO
+    isProcessingGuess = false;
+    
     currentRow = 0; currentTile = 0; currentGuessArr = ["", "", "", "", ""];
     document.getElementById('round-display').innerText = `${r}/${t}`;
     document.getElementById('message-area').style.opacity = '0';
@@ -1009,8 +1018,15 @@ function handleInput(key) {
 }
 
 function submitGuess(guess) {
+    // SE JÁ ESTIVER PROCESSANDO, CANCELA NOVOS CLIQUES
+    if (isProcessingGuess) return;
+
     if (guess.length !== 5) { showMessage("Muito curta", "#eab308"); setTimeout(()=>document.getElementById('message-area').style.opacity='0', 1500); return; }
     if (!CLIENT_WORDS.includes(guess)) { showMessage("Palavra inválida", "#e11d48"); setTimeout(()=>document.getElementById('message-area').style.opacity='0', 1500); return; }
+    
+    // ATIVA A TRAVA
+    isProcessingGuess = true;
+    
     if(socket) socket.emit('submitGuess', { roomId: currentRoomId, guess: guess });
 }
 
