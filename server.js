@@ -11,12 +11,10 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const rateLimit = require('express-rate-limit');
 
 const app = express();
-// Configuração essencial para o Google/Cookies funcionarem em produção (HTTPS)
 app.set('trust proxy', 1);
 
 const server = http.createServer(app);
 
-// Configuração otimizada do Socket.io
 const io = new Server(server, {
     pingTimeout: 60000,
     pingInterval: 25000,
@@ -25,16 +23,18 @@ const io = new Server(server, {
 });
 
 // === LIMITES DE SEGURANÇA ===
-const MAX_GLOBAL_PLAYERS = 500; // Limite rígido de jogadores simultâneos
+const MAX_GLOBAL_PLAYERS = 500; 
 const MAX_ROOMS = 100;
 const ROUND_TIME = 45; 
 const TOTAL_ROUNDS = 10;
+const RECONNECT_GRACE_PERIOD = 60000; // 60 segundos para voltar do WhatsApp
 
 // ===========================================================================
-// ÁREA DE COLAGEM DA LISTA DE PALAVRAS (SERVER)
+// LISTA DE PALAVRAS (COLE AQUI A SUA LISTA GIGANTE)
 // ===========================================================================
+
 const WORDS = [
-    // >>> COLE AQUI A SUA LISTA GIGANTE <<<
+    // ... SUAS PALAVRAS AQUI ...
 	"ABACA", "ABATA", "ABATE", "ABATI", "ABEBE", "ABECE", "ABEDO", "ABETA", "ABETE", "ABETO",
     "ABEXI", "ABICO", "ABIDO", "ABIET", "ABIGA", "ABILA", "ABITA", "ABJEO", "ABOAR", "ABOAS",
     "ABOCA", "ABOFE", "ABOIO", "ABOIS", "ABOLE", "ABOLI", "ABONA", "ABONO", "ABOOI", "ABOOU",
@@ -645,12 +645,11 @@ const WORDS = [
     "ZUPAR", "ZURNA", "ZURRA", "ZURRE", "ZURRO", "ZURUO", "ZURZE", "MASSA", "MARTE", "MILTO", "PASSA", "PASSO", "PISCA","TERMO"
 ];
 
-// === 1. CONEXÃO MONGODB ===
+// === MONGODB ===
 mongoose.connect(process.env.MONGO_URI)
     .then(() => console.log('✅ MongoDB Conectado'))
     .catch(err => console.error('❌ Erro Mongo:', err));
 
-// === 2. MODELO DE USUÁRIO ===
 const userSchema = new mongoose.Schema({
     googleId: { type: String, required: true, unique: true },
     username: String,
@@ -663,11 +662,10 @@ const userSchema = new mongoose.Schema({
     lastDailyLogin: { type: Date, default: Date.now }, 
     createdAt: { type: Date, default: Date.now }
 });
-// Índices para performance
 userSchema.index({ googleId: 1 });
 const User = mongoose.model('User', userSchema);
 
-// === 3. PASSPORT ===
+// === PASSPORT ===
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID,
     clientSecret: process.env.GOOGLE_CLIENT_SECRET,
@@ -694,7 +692,7 @@ passport.use(new GoogleStrategy({
 passport.serializeUser((user, done) => done(null, user.id));
 passport.deserializeUser((id, done) => User.findById(id).then(u => done(null, u)).catch(e => done(e)));
 
-// === 4. MIDDLEWARES ===
+// === MIDDLEWARES ===
 const isProduction = process.env.NODE_ENV === 'production';
 
 const sessionMiddleware = session({
@@ -704,7 +702,7 @@ const sessionMiddleware = session({
     store: MongoStore.create({ mongoUrl: process.env.MONGO_URI }),
     cookie: { 
         maxAge: 24 * 60 * 60 * 1000, 
-        secure: isProduction, // HTTPS em produção, HTTP em localhost
+        secure: isProduction, 
         sameSite: isProduction ? 'none' : 'lax' 
     }
 });
@@ -729,10 +727,9 @@ io.use((socket, next) => {
     else next(new Error('unauthorized'));
 });
 
-// === ROTAS E BLOQUEIO DE LOTAÇÃO ===
+// === ROTAS ===
 app.use('/auth/google', loginLimiter, (req, res, next) => {
     if (req.user) return next();
-    // Se o servidor estiver cheio, rejeita novos logins do Google
     if (io.engine.clientsCount >= MAX_GLOBAL_PLAYERS) return res.status(503).send('Servidor Lotado! Tente mais tarde.');
     next();
 });
@@ -746,8 +743,10 @@ app.get('/api/leaderboard', async (req, res) => {
     catch(e) { res.status(500).json([]); }
 });
 
-// === LÓGICA DO JOGO ===
+// === ESTADO GLOBAL ===
 const rooms = {};
+// Armazena timers de desconexão: { "userId": TimeoutObject }
+const disconnectTimers = {};
 
 function generateRoomId() { return Math.floor(100000 + Math.random() * 900000).toString(); }
 
@@ -779,7 +778,6 @@ async function checkDailyReset(userId) {
         const isDifferentDay = now.getDate() !== lastLogin.getDate() || now.getMonth() !== lastLogin.getMonth() || now.getFullYear() !== lastLogin.getFullYear();
 
         if (isDifferentDay) {
-            // Se mudou o dia e tem menos que 5, reseta para 5.
             if (user.energy < 5) user.energy = 5;
             user.lastDailyLogin = now;
             await user.save();
@@ -791,31 +789,87 @@ async function checkDailyReset(userId) {
     } catch (e) { return null; }
 }
 
-// === SOCKET EVENTS ===
+// === SOCKET LOGIC ===
 io.on('connection', async (socket) => {
     const user = socket.request.user;
-    
-    // Bloqueia conexão socket extra se servidor cheio
-    if(!user || io.engine.clientsCount > MAX_GLOBAL_PLAYERS) { socket.disconnect(); return; }
+    const userId = user._id.toString();
 
-    const dbUser = await checkDailyReset(user._id);
+    // Bloqueia se servidor lotado (mas permite reconexão se já estiver na lista)
+    // Se o user tem um timer de disconnect, significa que ele está reconectando, então deixamos passar
+    if((!user || io.engine.clientsCount > MAX_GLOBAL_PLAYERS) && !disconnectTimers[userId]) { 
+        socket.disconnect(); 
+        return; 
+    }
+
+    const dbUser = await checkDailyReset(userId);
     if (!dbUser) { socket.disconnect(); return; }
 
-    console.log(`+1 Jogador: ${dbUser.username} (Total: ${io.engine.clientsCount})`);
+    console.log(`Conexão: ${dbUser.username} (ID: ${socket.id})`);
+    
+    // === LÓGICA DE RECONEXÃO ===
+    // Se este usuário tinha acabado de cair, cancelamos a expulsão dele
+    if (disconnectTimers[userId]) {
+        console.log(`♻️ ${dbUser.username} voltou antes do tempo acabar! Cancelando expulsão.`);
+        clearTimeout(disconnectTimers[userId]);
+        delete disconnectTimers[userId];
+
+        // Procurar qual sala ele estava e atualizar o socket ID
+        for (const roomId in rooms) {
+            const room = rooms[roomId];
+            // Procura o jogador pelo ID do Banco de Dados (não pelo socket antigo que morreu)
+            const oldSocketId = Object.keys(room.players).find(sid => room.players[sid].dbId.toString() === userId);
+
+            if (oldSocketId) {
+                // Recupera os dados do jogador
+                const playerData = room.players[oldSocketId];
+                
+                // Remove a chave antiga e cria a nova com o novo Socket ID
+                delete room.players[oldSocketId];
+                playerData.id = socket.id; // Atualiza ID
+                room.players[socket.id] = playerData; // Salva com nova chave
+
+                // Atualiza Host se necessário
+                if (room.host === oldSocketId) {
+                    room.host = socket.id;
+                    socket.emit('youAreHost');
+                }
+
+                // Reconecta o socket na sala do Socket.IO
+                socket.join(roomId);
+
+                // Avisa o cliente que ele voltou pra sala
+                socket.emit('roomJoined', { 
+                    roomId: roomId, 
+                    isHost: playerData.isHost, 
+                    playerId: socket.id 
+                });
+                
+                // Se o jogo já estava rolando, avisa o estado atual
+                if(room.state === 'PLAYING') {
+                    socket.emit('gameStarted', { gameMode: room.gameMode });
+                    socket.emit('newRound', { roundNumber: room.currentRound, totalRounds: TOTAL_ROUNDS, gameMode: room.gameMode });
+                    // Se ele já tinha chutado coisas, teria que repassar o estado (não implementado aqui para simplicidade, mas ele continua jogando a próxima)
+                }
+
+                emitPlayerUpdates(roomId);
+                console.log(`✅ ${dbUser.username} reconectado na sala ${roomId}`);
+                break; // Achou a sala, para de procurar
+            }
+        }
+    }
+
     socket.emit('userDataUpdate', dbUser);
     emitRoomList();
 
-    // --- FUNÇÃO DE SAÍDA (ATUALIZADA: NÃO DESCONTA ENERGIA AQUI) ---
-    async function handlePlayerExit(roomId, socketId) {
+    // --- FUNÇÃO DE SAÍDA DEFINITIVA ---
+    async function executePlayerExit(roomId, socketId) {
         const room = rooms[roomId];
         if (!room || !room.players[socketId]) return;
 
         const player = room.players[socketId];
+        console.log(`🚪 ${player.name} saiu definitivamente da sala ${roomId}`);
+
         const wasHost = player.isHost;
-
-        // REMOVIDO: Desconto de energia daqui para evitar cobrança dupla ou só cobrar ao sair.
-        // A energia agora é cobrada no 'startGame'.
-
         delete room.players[socketId];
         
         if (Object.keys(room.players).length === 0) {
@@ -835,7 +889,7 @@ io.on('connection', async (socket) => {
     }
 
     socket.on('createRoom', async ({ isPublic, roomSize }) => {
-        if (Object.keys(rooms).length >= MAX_ROOMS) return socket.emit('error', 'Muitas salas criadas.');
+        if (Object.keys(rooms).length >= MAX_ROOMS) return socket.emit('error', 'Muitas salas.');
         const u = await User.findById(user._id);
         if (u.energy < 1) return socket.emit('error', 'Sem energia!');
 
@@ -847,9 +901,7 @@ io.on('connection', async (socket) => {
         rooms[roomId] = {
             id: roomId, state: 'LOBBY', players: {}, host: socket.id,
             currentRound: 0, currentWord: "", timer: null, timeLeft: 0,
-            solversCount: 0, isPublic: !!isPublic, 
-            maxPlayers: limit,
-            gameMode: 'default'
+            solversCount: 0, isPublic: !!isPublic, maxPlayers: limit, gameMode: 'default'
         };
         joinRoomLogic(socket, roomId, u, true);
     });
@@ -858,7 +910,7 @@ io.on('connection', async (socket) => {
         const u = await User.findById(user._id);
         if (u.energy < 1) return socket.emit('error', 'Sem energia!');
         const room = rooms[roomId];
-        if (!room || (room.state !== 'LOBBY' && room.state !== 'ENDED') || Object.keys(room.players).length >= room.maxPlayers) return socket.emit('error', 'Sala indisponível.');
+        if (!room || (room.state !== 'LOBBY' && room.state !== 'ENDED') || Object.keys(room.players).length >= room.maxPlayers) return socket.emit('error', 'Indisponível.');
         joinRoomLogic(socket, roomId, u, false);
     });
 
@@ -880,25 +932,19 @@ io.on('connection', async (socket) => {
         }
     });
 
-    // --- INÍCIO DE JOGO (ATUALIZADO: DESCONTA ENERGIA AQUI) ---
     socket.on('startGame', async ({ roomId, gameMode }) => {
         const room = rooms[roomId];
         if (!room || room.host !== socket.id) return;
         if (Object.keys(room.players).length < 2) return socket.emit('error', 'Mínimo 2 jogadores.');
 
-        // 1. COBRANÇA DE ENERGIA DE TODOS OS JOGADORES DA SALA
         const playerSocketIds = Object.keys(room.players);
         for (const socketId of playerSocketIds) {
             const player = room.players[socketId];
-            
-            // Atualiza BD: Remove 1 energia e adiciona 1 jogo
             const updatedUser = await User.findByIdAndUpdate(
                 player.dbId, 
                 { $inc: { energy: -1, gamesPlayed: 1 } },
                 { new: true }
             );
-
-            // Avisa o front-end do jogador para atualizar a UI
             io.to(socketId).emit('userDataUpdate', updatedUser);
         }
 
@@ -928,14 +974,12 @@ io.on('connection', async (socket) => {
         if (isCorrect) {
             player.solvedRound = true; room.solversCount++;
             let points = 0;
-
             if (room.state === 'TIEBREAKER') {
                 player.score += 1;
                 io.to(roomId).emit('roundSuccess', `${player.name} É O GOAT SUPREMO!`);
                 endGameFinal(roomId);
                 return;
             }
-
             if (room.gameMode === 'competitive') {
                 points = Math.max(1, 11 - player.roundAttempts);
                 player.score += points;
@@ -957,19 +1001,35 @@ io.on('connection', async (socket) => {
     });
 
     socket.on('leaveMatch', async (roomId) => {
-        await handlePlayerExit(roomId, socket.id);
+        // Se a pessoa clicou em "Sair", é saída imediata, sem tempo de espera.
+        await executePlayerExit(roomId, socket.id);
         socket.leave(roomId);
         socket.emit('matchLeft');
         const updatedUser = await User.findById(user._id);
         socket.emit('userDataUpdate', updatedUser);
     });
 
+    // === DESCONEXÃO INTELIGENTE ===
     socket.on('disconnect', async () => {
+        console.log(`⚠️ Conexão perdida: ${user.username} (ID: ${socket.id})`);
+        
+        // Verifica se o jogador está em alguma sala
+        let foundRoomId = null;
         for (const rid in rooms) {
             if (rooms[rid].players[socket.id]) {
-                await handlePlayerExit(rid, socket.id);
+                foundRoomId = rid;
                 break;
             }
+        }
+
+        if (foundRoomId) {
+            // Se ele estava em uma sala, NÃO removemos agora.
+            // Agendamos a remoção para daqui a 60 segundos.
+            disconnectTimers[userId] = setTimeout(() => {
+                console.log(`⏰ Tempo esgotado para ${user.username}. Removendo da sala.`);
+                executePlayerExit(foundRoomId, socket.id);
+                delete disconnectTimers[userId];
+            }, RECONNECT_GRACE_PERIOD);
         }
     });
 });
@@ -977,7 +1037,6 @@ io.on('connection', async (socket) => {
 function startRound(roomId) {
     const room = rooms[roomId];
     if(!room) return;
-
     if (room.currentRound >= TOTAL_ROUNDS) { checkGameEnd(roomId); return; }
 
     room.currentRound++;
@@ -1007,7 +1066,6 @@ function checkGameEnd(roomId) {
     const room = rooms[roomId];
     if(!room) return;
     const players = Object.values(room.players).sort((a,b) => b.score - a.score);
-
     if (players.length > 1 && players[0].score === players[1].score) {
         room.state = 'TIEBREAKER';
         const maxScore = players[0].score;
